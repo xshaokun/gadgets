@@ -40,8 +40,7 @@ class FermiData:
     '''
 
     def __init__(self, dirpath='./'):
-        os.chdir(dirpath)
-        self.dir_path = os.getcwd()
+        self.dir_path = os.path.abspath(dirpath)
 
         with open(self.dir_path+'/fermi.inp','r') as f:
             text = f.readlines()
@@ -59,9 +58,9 @@ class FermiData:
         cmkpc=3.08e21
         filename = self.dir_path+'/xhascii.out'
 
-        print("calling function [read_xh]")
+        print("====> calling method [read_xh]")
         xh = np.fromfile(filename,sep=" ")
-        print("====> xh shape:",xh.shape,"\n")
+        print(f"xh shape: {xh.shape}\n")
         return xh/cmkpc
 
 
@@ -88,21 +87,23 @@ class FermiData:
             var = 'uy'
 
         if kprint == 0:
-            filename = var + 'atmascii.out'
+            filename = f"{var}atmascii.out"
         else:
-            filename = var + 'ascii.out' + str(kprint)
+            filename = f"{var}ascii.out{kprint}"
 
         if filename not in os.listdir(self.dir_path):
-            raise KeyError('There is no file named "'+filename+'" in this directory.')
+            raise KeyError(f'There is no file named {filename} in this directory.')
 
-        print("calling function [read_var]: ",var,", kprint=",kprint)
-        data = np.fromfile(filename,dtype=float,sep=" ")
+        path = f"{self.dir_path}/{filename}"
+
+        print(f"====> calling method [read_var]: {var}, kprint={kprint}")
+        data = np.fromfile(path,dtype=float,sep=" ")
         dmax = data.max()
         dmin = data.min()
         data = data.reshape([self.zone,self.zone])
         data = data.T  # reverse index from fortran
-        print("====> ",var,kprint," shape:",data.shape)
-        print("====> max:",dmax,' min:',dmin,"\n")
+        print(f"{var} {kprint} shape: {data.shape}")
+        print(f"max: {dmax}, min: {dmin}\n")
         return data
 
 
@@ -147,12 +148,13 @@ def meshgrid(data,rrange,zrange):
     numpy.ndarray tuple (R,z)
     '''
 
+    print("====> calling function [meshgrid]:")
     z = data[np.where(data<=zrange)]
     R = data[np.where(data<=rrange)]
     RR = np.hstack((-R[::-1],R))
     R,z = np.meshgrid(RR,z)
-    print('====> mesh region: [',z.max(),R.max(),'] kpc')
-    print('====> xh_mesh shape: ','z-',R.shape[0],', R-',R.shape[1],'\n')
+    print(f'mesh region: [{z.max()},{R.max()}] kpc')
+    print(f'xh_mesh shape: z-{R.shape[0]} R-{R.shape[1]}\n')
 
     return R,z
 
@@ -179,7 +181,7 @@ def mesh_var(data, var, meshgrid):
     zrange = meshgrid.shape[0]
     rrange = int(meshgrid.shape[1]/2)
 
-    print("calling function [mesh_var] (",var,"): construct the region within ",meshgrid.max()," kpc.")
+    print(f"====> calling function [mesh_var] {var}: construct the region within {meshgrid.max()} kpc.")
 
     meshr = data[:zrange,:rrange]
 
@@ -190,7 +192,7 @@ def mesh_var(data, var, meshgrid):
 
     mesh = np.hstack((meshl,meshr))
 
-    print('====> ',var,' shape:','z-',mesh.shape[0],' ,R-',mesh.shape[1],'\n')
+    print(f'{var} shape: z-{mesh.shape[0]}, R-{mesh.shape[1]}\n')
 
     return mesh
 
@@ -201,8 +203,8 @@ def slice_mesh(data, coord, direction='z', kpc=0):
 
     Parameter
     ---------
-    var : string
-        the variable of output. It is the same as that in simulation, i.e. 'den', 'e', 'ecr', 'uz', 'ur'.
+    data: numpy.ndarray
+        the numpy.ndarray from FermiData.read_var(var,kprint).
 
     coord : numpy.ndarray
         the numpy.ndarray from FermiData.read_xh().
@@ -222,12 +224,15 @@ def slice_mesh(data, coord, direction='z', kpc=0):
     n_constant = 5.155e23  # num_den_electron = den * n_constant
 
     if direction == 'z':
-        return data[nu,:]
-    elif direction == 'r':
         return data[:,nu]
+    elif direction == 'r':
+        return data[nu,:]
     else:
         raise KeyError("Only 'z' and 'r' are allowed.")
 
 def find_nearst(arr,target):
+    '''
+    Given number, find out the index of nearest element in an 1D array.
+    '''
     index = np.abs(arr-target).argmin()
-    return arr[index]
+    return index

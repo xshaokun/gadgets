@@ -1,43 +1,48 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+""" 
+fermi.py - tools for analyzing outputs of fermi.f
+Last Modified: 2020.05.01
+
+Copyright(C) 2020 Shaokun Xie <https://xshaokun.com>
+Licensed under the MIT License, see LICENSE file for details
+"""
+
+
 import numpy as np
 import pandas as pd
 import os
 
-class FermiData:
-    '''
-    Tools for reading output data of fermi.f
+class FermiData(object):
+    """Tools for reading output data of fermi.f
 
-    Parameters
-    ----------
-    dirpath : str, optional
-        Directory path to be loaded. Default is './', which assumes the you work in
-        current directory.
+    Used for reading output data of fermi.f, including the dimension and size of meshgrid, 
+    variable outputs and logging files.
 
-    Attributes
-    ----------
-    dir_path : str
-        Path to directory form which the data is read.
-    iezone : int
-        the number of even spaced grids.
-    ilzone : int
-        the numver of logarithmic spaced grids.
-    ezone : float
-        the length of even spaced region.
-    zone : int
-        the number of total grids in one direction. (two directions are the same.)
-    reso : float
-        the resolution for the even spaced grids.
-    kprint : list
-        list of time (year) for output.
+    Args:
+        dirpath: str, optional
+            Directory path to be loaded. Default is './', which assumes the you work in
+            current directory.
 
-    Methods
-    ----------
-    read_xh : numpy.ndarray
-        read 'xhascii.out' file.
-    read_var : numpy.ndarray
-        read '*ascii.out*' meshgrid file.
-    read_hist : pandas.core.frame.DataFrame
-        read '*c.out' history file.
-    '''
+    Attributes:
+        dir_path: str
+            Path to directory form which the data is read.
+        iezone: int
+            the number of even spaced grids.
+        ilzone: int
+            the numver of logarithmic spaced grids.
+        ezone: float
+            the length of even spaced region.
+        zone: int
+            the number of total grids in one direction. (both directions are same.)
+        reso: float
+            the resolution for the even spaced grids.
+        kprint: list
+            list of time (year) for output.
+
+    Example:
+        >>> data = FermiData(dirpath='./data/fermi/')
+    """
 
     def __init__(self, dirpath='./'):
         self.dir_path = os.path.abspath(dirpath)
@@ -53,33 +58,50 @@ class FermiData:
             self.kprint = text[20].split()[:-1]
 
 
-    #read coordinates
     def read_xh(self):
+        """read 'xhascii.out' file. 
+
+        Returns:
+            xh: numpy.ndarray
+                1D coordination in the unit of kpc.
+
+        Example:
+            >>> data = FermiData(dirpath='./data/fermi/')
+            >>> data.read_xh()
+        """
+
+
         cmkpc=3.08e21
         filename = self.dir_path+'/xhascii.out'
 
-        print("====> calling method [read_xh]")
+        print(f"====> call method {__name__}()")
         xh = np.fromfile(filename,sep=" ")
-        print(f"xh shape: {xh.shape}\n")
-        return xh/cmkpc
+        print(f"    shape: {xh.shape}")
+        xh = xh/cmkpc
+        return xh
 
 
     def read_var(self, var, kprint):
-        '''
-        read meshgrid file.
+        """read '*ascii.out*' variable outputs.
 
-        Parameter
-        ---------
-        var : string
-            the variable of output. It is the same as that in simulation, i.e. 'den', 'e', 'ecr', 'uz', 'ur'.
+        Transfrom the variable output to an array according to the index. 
 
-        kprint : int
-            the kprint of output.
+        Args:
+            var: str
+                the variable name of output, the prefix of variable file read. 
+            kprint: int
+                the kprint of output. 0 for initial value. 
 
-        Return
-        ------
-        numpy.ndarray
-        '''
+        Returns:
+            data: numpy.ndarray
+                data[0,0] corresponds to [zmax, 0], data[-1,-1] corresponds to [0, rmax]
+
+        Example:
+            >>> data = FermiData('./data/fermi/')
+            >>> data.read_var('den', 1)
+        """
+
+        print(f"====> call method {__name__}(var= {var}, kprint={kprint})")
 
         if var == 'uz':
             var = 'ux'
@@ -91,35 +113,28 @@ class FermiData:
         else:
             filename = f"{var}ascii.out{kprint}"
 
-        if filename not in os.listdir(self.dir_path):
-            raise KeyError(f'There is no file named {filename} in this directory.')
+        file = f"{self.dir_path}/{filename}"
 
-        path = f"{self.dir_path}/{filename}"
-
-        print(f"====> calling method [read_var]: {var}, kprint={kprint}")
-        data = np.fromfile(path,dtype=float,sep=" ")
+        data = np.fromfile(file,dtype=float,sep=" ")
         dmax = data.max()
         dmin = data.min()
         data = data.reshape([self.zone,self.zone])
         data = data.T  # reverse index from fortran
-        print(f"{var} {kprint} shape: {data.shape}")
-        print(f"max: {dmax}, min: {dmin}\n")
+        print(f"    shape: {data.shape}")
+        print(f"    max: {dmax}, min: {dmin}")
         return data
 
 
     def read_hist(self, var):
-        '''
-        read '*c.out' history file.
+        """read '*c.out' history file.
 
-        Parameter
-        ---------
-        var : string
-            the variable of history. The value can be 'energy', 'gasmass'.
+        Args:
+            var : string
+                the variable of history. For example: 'gasmass' for 'gasmassc.out'.
 
-        Return
-        ------
-        pandas.DataFrame
-        '''
+        Returns:
+            pandas.DataFrame
+        """
 
         if(var == 'energy'):
             path = self.dir_path+'/energyc.out'
@@ -128,55 +143,63 @@ class FermiData:
             path = self.dir_path+'/gasmassc.out'
             return pd.read_csv(path,skiprows=2,delim_whitespace=True,index_col='tyr')
         else:
-            raise KeyError('Unvailable name, you should check the name or add this option to the module.')
+            raise ValueError('Unvailable name, you should check the name or add this option to the module.')
 
 
-def meshgrid(data,rrange,zrange):
-    '''
-    construct mesh grid of spatial coordinations.
+def meshgrid(coord,rrange,zrange):
+    """construct mesh grid based on coordination.
 
-    Parameter
-    ---------
-    zrange : float
-        the range of z.
+    Mirror the coordination horizontally
 
-    rrange : float
-        the range of R.
+    Args:
+        zrange : float
+            the outer boundary of z.
+        rrange : float
+            the outer boundary of R.
 
-    Return
-    ------
-    numpy.ndarray tuple (R,z)
-    '''
+    Returns:
+        R, z: numpy.ndarray, numpy.ndarray
+    
+    Example:
+        >>> data = FermiData(dirpath='./data/fermi/')
+        >>> xh = data.read_xh()
+        >>> meshgrid(xh, 100, 100)
+    """
 
-    print("====> calling function [meshgrid]:")
-    z = data[np.where(data<=zrange)]
-    R = data[np.where(data<=rrange)]
+    print(f"====> call function {__name__}(data, rrange={rrange}, zrange={zrange})")
+    z = coord[np.where(coord<=zrange)]
+    R = coord[np.where(coord<=rrange)]
     RR = np.hstack((-R[::-1],R))
     R,z = np.meshgrid(RR,z)
-    print(f'mesh region: [{z.max()},{R.max()}] kpc')
-    print(f'xh_mesh shape: z-{R.shape[0]} R-{R.shape[1]}\n')
+    print(f'    mesh region: [{z.max()},{R.max()}] kpc')
+    print(f'    xh_mesh shape: z-{R.shape[0]} R-{R.shape[1]}')
 
-    return R,z
+    return R, z
 
 def mesh_var(data, var, meshgrid):
-    '''
-    generate meshgrid.
+    """construct meshgrid based on variable data.
 
-    Parameter
-    ---------
-    data : numpy.ndarray
-        the numpy.ndarray from FermiData.read_var(var,kprint).
+    based on the data read by FermiData.read_var(), further constructing variable output 
+    to be available for matplotlib.pyplot.pcolormesh(). 
 
-    var : string
-        the variable of output. It is the same as that in simulation, i.e. 'den', 'e', 'ecr'.
+    Args:
+        data : numpy.ndarray
+            the numpy.ndarray from FermiData.read_var(var,kprint).
+        var : string
+            the variable name.
+        meshgrid : numpy.ndarray
+            the numpy.ndarray from FermiData.meshgrid(var,kprint). used to constrain the shape of var array.
 
-    meshgrid : numpy.ndarray
-        the numpy.ndarray from FermiData.meshgrid(var,kprint). be used to constrain the shape of var array.
+    Returns:
+        mesh: numpy.ndarray
 
-    Return
-    ------
-    numpy.ndarray
-    '''
+    Example:
+        >>> data = FermiData(dirpath='./data/fermi/')
+        >>> xh = data.read_xh()
+        >>> xh = meshgrid(xh, 100, 100)
+        >>> den1 = data.read_var('den', 1)
+        >>> den1 = mesh_var(den1, 'den', xh)
+    """
 
     zrange = meshgrid.shape[0]
     rrange = int(meshgrid.shape[1]/2)
@@ -185,6 +208,7 @@ def mesh_var(data, var, meshgrid):
 
     meshr = data[:zrange,:rrange]
 
+    # the horizontal mirror of r-velocity should be in opposite direction.
     if(var == 'ur'):
         meshl = -np.fliplr(meshr)
     else:
@@ -192,47 +216,65 @@ def mesh_var(data, var, meshgrid):
 
     mesh = np.hstack((meshl,meshr))
 
-    print(f'{var} shape: z-{mesh.shape[0]}, R-{mesh.shape[1]}\n')
+    print(f'{var} shape: z-{mesh.shape[0]}, R-{mesh.shape[1]}')
 
     return mesh
 
 
 def slice_mesh(data, coord, direction='z', kpc=0):
-    '''
-    slice meshgrid array.
+    """slice meshgrid array.
 
-    Parameter
-    ---------
-    data: numpy.ndarray
-        the numpy.ndarray from FermiData.read_var(var,kprint).
+    extract data at given direction and given distance.
+    
+    Args:
+        data: numpy.ndarray
+            the numpy.ndarray from FermiData.read_var(var,kprint).
+        coord : numpy.ndarray
+            the numpy.ndarray from FermiData.read_xh().
+        direction : string
+            the direction of slice. The value can be 'z' or 'r'. Default is 'z'.
+        kpc : int
+            distance to the axis in unit of 'kpc'. Default is 0.
 
-    coord : numpy.ndarray
-        the numpy.ndarray from FermiData.read_xh().
+    Returns:
+        data: numpy.ndarray
 
-    direction : string
-        the direction of slice. The value can be 'z' or 'r'. Default is 'z'.
+    Example:
+        >>> data = FermiData(dirpath='./data/fermi/')
+        >>> xh = data.read_xh()
+        >>> den1 = data.read_var('den', 1)
+        >>> den1_slice = slice_mesh(den1, xh, direction='z', kpc=0)
+    """
 
-    kpc : int
-        distance to the axis in unit of 'kpc'. Default is 0.
 
-    Return
-    ------
-    1-D numpy.ndarray
-    '''
     nu = find_nearst(coord, kpc)
 
     n_constant = 5.155e23  # num_den_electron = den * n_constant
 
     if direction == 'z':
-        return data[:,nu]
+        data = data[:,nu]
+        return data
     elif direction == 'r':
-        return data[nu,:]
+        data = data[nu,:]
+        return data
     else:
-        raise KeyError("Only 'z' and 'r' are allowed.")
+        raise ValueError("Only 'z' and 'r' are allowed.")
 
 def find_nearst(arr,target):
-    '''
-    Given number, find out the index of nearest element in an 1D array.
-    '''
+    """get the index of nearest value
+
+    Given a number, find out the index of the nearest element in an 1D array.
+
+    Args:
+        arr: array for searching
+        target: target number
+    """
+
+
     index = np.abs(arr-target).argmin()
     return index
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()

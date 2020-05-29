@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-""" 
+"""
 fermi.py - tools for analyzing outputs of fermi.f
 Last Modified: 2020.05.01
 
@@ -11,12 +11,16 @@ Licensed under the MIT License, see LICENSE file for details
 
 import numpy as np
 import pandas as pd
+from astropy import units as u
+from astropy import constants as cons
 import os
+import sys
+
 
 class FermiData(object):
     """Tools for reading output data of fermi.f
 
-    Used for reading output data of fermi.f, including the dimension and size of meshgrid, 
+    Used for reading output data of fermi.f, including the dimension and size of meshgrid,
     variable outputs and logging files.
 
     Args:
@@ -58,39 +62,41 @@ class FermiData(object):
             self.kprint = text[20].split()[:-1]
 
 
-    def read_xh(self):
-        """read 'xhascii.out' file. 
+    def read_coord(self, var):
+        """read coordination file.
+
+        Args:
+            var: str
+                the prefix of coordination file.
 
         Returns:
-            xh: numpy.ndarray
+            x: numpy.ndarray
                 1D coordination in the unit of kpc.
 
         Example:
             >>> data = FermiData(dirpath='./data/fermi/')
-            >>> data.read_xh()
+            >>> data.read_coord('xh')  # Read volume-centered coordination
+            >>> data.read_coord('x')  # Read volume-boundary coordination
         """
 
+        filename = f"{self.dir_path}/{var}ascii.out"
 
-        cmkpc=3.08e21
-        filename = self.dir_path+'/xhascii.out'
-
-        print(f"====> call method {__name__}()")
-        xh = np.fromfile(filename,sep=" ")
-        print(f"    shape: {xh.shape}")
-        xh = xh/cmkpc
-        return xh
+        print(f"====> call method {sys._getframe().f_code.co_name}()")
+        x = np.fromfile(filename,sep=" ") * u.cm.to(u.kpc)
+        print(f"    shape: {x.shape}")
+        return x
 
 
     def read_var(self, var, kprint):
         """read '*ascii.out*' variable outputs.
 
-        Transfrom the variable output to an array according to the index. 
+        Transfrom the variable output to an array according to the index.
 
         Args:
             var: str
-                the variable name of output, the prefix of variable file read. 
+                the variable name of output, the prefix of variable file read.
             kprint: int
-                the kprint of output. 0 for initial value. 
+                the kprint of output. 0 for initial value.
 
         Returns:
             data: numpy.ndarray
@@ -101,7 +107,7 @@ class FermiData(object):
             >>> data.read_var('den', 1)
         """
 
-        print(f"====> call method {__name__}(var= {var}, kprint={kprint})")
+        print(f"====> call method {sys._getframe().f_code.co_name}(var= {var}, kprint={kprint})")
 
         if var == 'uz':
             var = 'ux'
@@ -159,14 +165,14 @@ def meshgrid(coord,rrange,zrange):
 
     Returns:
         R, z: numpy.ndarray, numpy.ndarray
-    
+
     Example:
         >>> data = FermiData(dirpath='./data/fermi/')
-        >>> xh = data.read_xh()
+        >>> xh = data.read_coord('xh')
         >>> meshgrid(xh, 100, 100)
     """
 
-    print(f"====> call function {__name__}(data, rrange={rrange}, zrange={zrange})")
+    print(f"====> call function {sys._getframe().f_code.co_name}(data, rrange={rrange}, zrange={zrange})")
     z = coord[np.where(coord<=zrange)]
     R = coord[np.where(coord<=rrange)]
     RR = np.hstack((-R[::-1],R))
@@ -179,8 +185,8 @@ def meshgrid(coord,rrange,zrange):
 def mesh_var(data, var, meshgrid):
     """construct meshgrid based on variable data.
 
-    based on the data read by FermiData.read_var(), further constructing variable output 
-    to be available for matplotlib.pyplot.pcolormesh(). 
+    based on the data read by FermiData.read_var(), further constructing variable output
+    to be available for matplotlib.pyplot.pcolormesh().
 
     Args:
         data : numpy.ndarray
@@ -195,7 +201,7 @@ def mesh_var(data, var, meshgrid):
 
     Example:
         >>> data = FermiData(dirpath='./data/fermi/')
-        >>> xh = data.read_xh()
+        >>> xh = data.read_coord('xh')
         >>> xh = meshgrid(xh, 100, 100)
         >>> den1 = data.read_var('den', 1)
         >>> den1 = mesh_var(den1, 'den', xh)
@@ -225,12 +231,12 @@ def slice_mesh(data, coord, direction='z', kpc=0):
     """slice meshgrid array.
 
     extract data at given direction and given distance.
-    
+
     Args:
         data: numpy.ndarray
             the numpy.ndarray from FermiData.read_var(var,kprint).
         coord : numpy.ndarray
-            the numpy.ndarray from FermiData.read_xh().
+            the numpy.ndarray from FermiData.read_coord(var).
         direction : string
             the direction of slice. The value can be 'z' or 'r'. Default is 'z'.
         kpc : int
@@ -245,7 +251,6 @@ def slice_mesh(data, coord, direction='z', kpc=0):
         >>> den1 = data.read_var('den', 1)
         >>> den1_slice = slice_mesh(den1, xh, direction='z', kpc=0)
     """
-
 
     nu = find_nearst(coord, kpc)
 
@@ -269,7 +274,6 @@ def find_nearst(arr,target):
         arr: array for searching
         target: target number
     """
-
 
     index = np.abs(arr-target).argmin()
     return index

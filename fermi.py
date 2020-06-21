@@ -16,6 +16,14 @@ from astropy import constants as cons
 import os
 import sys
 
+def claim(func):
+    def funcname(*args, **kw):
+        if args or kw:
+            print(f"====> call function {func.__name__}", end="")
+        else:
+            print(f"====> call function {func.__name__}()")
+        return func(*args, **kw)
+    return funcname
 
 class FermiData(object):
     """Tools for reading output data of fermi.f
@@ -81,7 +89,7 @@ class FermiData(object):
 
         filename = f"{self.dir_path}/{var}ascii.out"
 
-        print(f"====> call method {sys._getframe().f_code.co_name}()")
+        print(f"====> call method {sys._getframe().f_code.co_name}(var={var})")
         x = np.fromfile(filename,sep=" ") * u.cm.to(u.kpc)
         print(f"    shape: {x.shape}")
         return x
@@ -107,7 +115,7 @@ class FermiData(object):
             >>> data.read_var('den', 1)
         """
 
-        print(f"====> call method {sys._getframe().f_code.co_name}(var= {var}, kprint={kprint})")
+        print(f"====> call method {sys._getframe().f_code.co_name}(var={var}, kprint={kprint})")
 
         if var == 'uz':
             var = 'ux'
@@ -222,7 +230,7 @@ def mesh_var(data, var, meshgrid):
 
     mesh = np.hstack((meshl,meshr))
 
-    print(f'{var} shape: z-{mesh.shape[0]}, R-{mesh.shape[1]}')
+    print(f'    {var} shape: z-{mesh.shape[0]}, R-{mesh.shape[1]}')
 
     return mesh
 
@@ -278,6 +286,13 @@ def find_nearst(arr,target):
     index = np.abs(arr-target).argmin()
     return index
 
+def latex_float(f):
+    float_str = "{0:.2g}".format(f)
+    if "e" in float_str:
+        base, exponent = float_str.split("e")
+        return r"{0} \times 10^{{{1}}}".format(base, int(exponent))
+    else:
+        return float_str
 
 if __name__ == "__main__":
     import doctest

@@ -14,7 +14,7 @@ from astropy import constants as cons
 from astropy import units as u
 
 
-def Ledd(mbh, unit=u.Msun):
+def Ledd(mbh):
     """Eddington Luminosity
 
     Given Black Hole mass in the unit of Msun:
@@ -24,12 +24,11 @@ def Ledd(mbh, unit=u.Msun):
         L: in the unit of Lsun
     """
 
-    mbh = mbh*unit
     L = 4 * np.pi * cons.G* mbh * cons.m_p * cons.c / cons.sigma_T
     return L.to(u.Lsun)
 
 
-def MdotEdd(mbh, unit=u.Msun, epsilon=0.1):
+def MdotEdd(mbh, epsilon=0.1):
     """Eddington Accretion Rate
 
     Given Black Hole mass in the unit of Msun:
@@ -40,7 +39,7 @@ def MdotEdd(mbh, unit=u.Msun, epsilon=0.1):
         Mdot: in the unit of Msun/yr
     """
 
-    Mdot = Ledd(mbh, unit=unit) / (epsilon * cons.c**2)
+    Mdot = Ledd(mbh) / (epsilon * cons.c**2)
     return Mdot.to(u.Msun/u.yr)
 
 
@@ -78,13 +77,13 @@ def cs(gamma=5./3., mu=0.61, **kw):
     """
 
     if 'T' in kw:
-        T = kw['T'] * u.K
+        T = kw['T']
         cs = np.sqrt(gamma* cons.k_B * T / (mu* cons.m_p))
 
     else:
         try:
-            P = kw['P'] * u.erg / u.cm**3
-            rho = kw['rho'] * u.g / u.cm**3
+            P = kw['P']
+            rho = kw['rho']
             cs = np.sqrt(gamma* P / rho)
         except KeyError as ke:
             print(f"The keyword {ke} is unvalid, you should input either T or (P & rho)")
@@ -93,15 +92,46 @@ def cs(gamma=5./3., mu=0.61, **kw):
         
     return cs.to(u.km/u.s)
 
-def vkep(m, unit=u.Msun, r=1.*u.kpc):
+def vkep(m, r=1.*u.kpc):
     """Keplerian velocity
 
-    Given a point mass and radius:
+    Given a point mass M and radius r:
         vkep = G * M / r
     
     Return:
         vkep: in the unit of km/s
     """
 
-    vkep = cons.G * m*unit / r
+    vkep = cons.G * m / r
     return vkep.to(u.km/u.s)
+
+def eos(mu=0.61, **kw):
+    """ Equation of State
+
+    Keywords:
+        mu: mean particle weight, default is 0.61
+    
+    **keywords:
+        T: temperature in unit of K
+        P: pressure in unit of erg/cm**3
+        rho: density in unit of g/cm**3
+
+    Return:
+        in the unit of cgs
+
+    Example:
+        >>> eos(T=1e6, P=3e-12)
+
+        >>> eos(P=3e-12, rho = 1e-26)
+    """
+    
+    coeff = (cons.k_B / mu / cons.m_p).cgs.value
+    if 'T' in kw and 'P' in kw:
+        result = coeff * P * T
+    elif 'T' in kw and 'P' in kw:
+        result = kw['P'] / kw['T'] / coeff
+    elif 'P' in kw and 'rho' in kw:
+        result = kw['P'] / kw['rho'] / coeff
+    else:
+        raise KeyError('Two values among T, rho and P shouled be given.')
+    return result

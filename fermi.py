@@ -15,15 +15,11 @@ from astropy import units as u
 from astropy import constants as cons
 import os
 import sys
+from skpy.utilities.logger import fmLogger as mylog
 
-def claim(func):
-    def funcname(*args, **kw):
-        if args or kw:
-            print(f"====> call function {func.__name__}", end="")
-        else:
-            print(f"====> call function {func.__name__}()")
-        return func(*args, **kw)
-    return funcname
+PARA = "Parameter: {0:<20}\t = {1:<10}"
+PROP = "Property: {0:<20}\t = {1:<10}"
+DIME = "Dimension: {0:<20}\t : {1:<10}"
 
 class FermiData(object):
     """Tools for reading output data of fermi.f
@@ -58,16 +54,49 @@ class FermiData(object):
 
     def __init__(self, dirpath='./'):
         self.dir_path = os.path.abspath(dirpath)
+        mylog.info(f'Import data from {self.dir_path}')
 
         with open(self.dir_path+'/fermi.inp','r') as f:
-            text = f.readlines()
-            dims = text[2].split()
+            self.inp = f.readlines()
+            self.bc = self.inp[0].split()[:4]
+            dims = self.inp[2].split()
             self.iezone = int(dims[0])
             self.ilzone = int(dims[1])
             self.ezone = float(dims[2])
             self.zone = self.iezone + self.ilzone
             self.reso = self.ezone/self.iezone
-            self.kprint = text[20].split()[:-1]
+            self.kprint = self.inp[20].split()[:-1]
+
+        mylog.info(PARA.format("bundary_condition",f"{self.bc}"))
+        mylog.info(PARA.format("equally_spaced_grids",f"{self.iezone}"))
+        mylog.info(PARA.format("log_spaced_grids",f"{self.ilzone}"))
+        mylog.info(PARA.format("equally_spaced_region",f"{self.ezone}"))
+        mylog.info(PARA.format("inner_resolution",f"{self.reso}"))
+        mylog.info(PARA.format("time_series",f"{self.kprint}"))
+
+
+    def read_inp(self , row, col):
+        """read parameter from input file.
+
+        Args:
+            row: int
+                the row number of parameter in the file. (Python style)
+
+            col: int
+                the colume number of parameter in the file. (Python style)
+
+        Returns:
+            para: str
+
+        Example:
+            >>> data = FermiData(dirpath='./data/fermi/')
+            >>> data.read_inp(1,3) # Read the parameter at the 2nd row and the 4th colume.
+        """
+        line = self.inp[row].split()
+        para = line[col]
+
+        return para
+
 
 
     def read_coord(self, var):
@@ -83,17 +112,52 @@ class FermiData(object):
 
         Example:
             >>> data = FermiData(dirpath='./data/fermi/')
-            >>> data.read_coord('xh')  # Read volume-centered coordination
-            >>> data.read_coord('x')  # Read volume-boundary coordination
+            >>> data.read_coord('xh')  # Read volume-centered coordinate
+            >>> data.read_coord('x')  # Read volume-boundary coordinate
         """
 
         filename = f"{self.dir_path}/{var}ascii.out"
+        mylog.info(f"====> call method {sys._getframe().f_code.co_name}(var={var})")
 
-        print(f"====> call method {sys._getframe().f_code.co_name}(var={var})")
+
         x = np.fromfile(filename,sep=" ") * u.cm.to(u.kpc)
-        print(f"    shape: {x.shape}")
+        mylog.info(DIME.format(f"{var}",f"{x.shape}"))
         return x
 
+
+    def get_dvolume(self):
+        """get volume of each cell
+
+        In the cylindrical symmetric coordinate, dvol = pi * R^2 * dz
+
+        Return:
+            dvol: numpy.ndarray
+                in the unit of kpc^-3
+        """
+
+        coord = self.read_coord('x')
+        rr, zz = np.meshgrid(coord, coord)
+        dz = np.diff(zz, axis=0)[:,:-1]
+        dr2 = np.diff(rr*rr)[:-1]
+        dvol = np.pi*dr2*dz
+        return dvol
+
+
+    def get_theta(self):
+        """get theta coordinate of each cell
+
+        From the cylindrical symmetric coordinate to spherical symmetric coordinate, theta = arctan( R/z )
+
+        Return:
+            theta: numpy.ndarray
+                in the unit of degree
+        """
+        
+        coord = self.read_coord('xh')
+        Rh, zh = np.meshgrid(coord, coord)
+        theta = np.arctan(Rh/zh)*u.rad.to(u.deg)
+        return theta
+        
 
     def read_var(self, var, kprint):
         """read '*ascii.out*' variable outputs.
@@ -115,8 +179,7 @@ class FermiData(object):
             >>> data.read_var('den', 1)
         """
 
-        print(f"====> call method {sys._getframe().f_code.co_name}(var={var}, kprint={kprint})")
-
+        mylog.info(f"====> call method {sys._getframe().f_code.co_name}(var={var}, kprint={kprint})")
         if var == 'uz':
             var = 'ux'
         if var == 'ur':
@@ -134,8 +197,8 @@ class FermiData(object):
         dmin = data.min()
         data = data.reshape([self.zone,self.zone])
         data = data.T  # reverse index from fortran
-        print(f"    shape: {data.shape}")
-        print(f"    max: {dmax}, min: {dmin}")
+        mylog.info(PROP.format("(min, max)",f"({dmin}, {dmax})"))
+
         return data
 
 
@@ -180,13 +243,12 @@ def meshgrid(coord,rrange,zrange):
         >>> meshgrid(xh, 100, 100)
     """
 
-    print(f"====> call function {sys._getframe().f_code.co_name}(data, rrange={rrange}, zrange={zrange})")
+    mylog.info(f"====> call function {sys._getframe().f_code.co_name}(data, rrange={rrange}, zrange={zrange})")
     z = coord[np.where(coord<=zrange)]
     R = coord[np.where(coord<=rrange)]
     RR = np.hstack((-R[::-1],R))
     R,z = np.meshgrid(RR,z)
-    print(f'    mesh region: [{z.max()},{R.max()}] kpc')
-    print(f'    xh_mesh shape: z-{R.shape[0]} R-{R.shape[1]}')
+    mylog.info(DIME.format('xh', f'z-{R.shape[0]} R-{R.shape[1]}'))
 
     return R, z
 
@@ -210,7 +272,7 @@ def mesh_var(data, var, meshgrid):
     Example:
         >>> data = FermiData(dirpath='./data/fermi/')
         >>> xh = data.read_coord('xh')
-        >>> xh = meshgrid(xh, 100, 100)
+        >>> Rh, zh = meshgrid(xh, 100, 100)
         >>> den1 = data.read_var('den', 1)
         >>> den1 = mesh_var(den1, 'den', xh)
     """
@@ -218,7 +280,7 @@ def mesh_var(data, var, meshgrid):
     zrange = meshgrid.shape[0]
     rrange = int(meshgrid.shape[1]/2)
 
-    print(f"====> calling function [mesh_var] {var}: construct the region within {meshgrid.max()} kpc.")
+    mylog.info(f"====> calling function [mesh_var] {var}: construct the region within {meshgrid.max()} kpc.")
 
     meshr = data[:zrange,:rrange]
 
@@ -230,7 +292,7 @@ def mesh_var(data, var, meshgrid):
 
     mesh = np.hstack((meshl,meshr))
 
-    print(f'    {var} shape: z-{mesh.shape[0]}, R-{mesh.shape[1]}')
+    mylog.info(DIME.format(f'{var}', f'z-{mesh.shape[0]}, R-{mesh.shape[1]}'))
 
     return mesh
 
@@ -255,7 +317,7 @@ def slice_mesh(data, coord, direction='z', kpc=0):
 
     Example:
         >>> data = FermiData(dirpath='./data/fermi/')
-        >>> xh = data.read_xh()
+        >>> xh = data.read_coord('xh)
         >>> den1 = data.read_var('den', 1)
         >>> den1_slice = slice_mesh(den1, xh, direction='z', kpc=0)
     """
@@ -272,6 +334,65 @@ def slice_mesh(data, coord, direction='z', kpc=0):
         return data
     else:
         raise ValueError("Only 'z' and 'r' are allowed.")
+
+
+def count_enclosed(coord, den, weight='mass', direction='r', interval=5):
+    """ sum up the grids inside out.
+
+    given a direction, sum up mass or volume of the grids inside out and output a profile.
+
+    Args:
+        coord: numpy.ndarray
+            the numpy.ndarray from FermiData.read_coord(var).
+        den: numpy.ndarray
+            density of girds. the numpy.ndarray from FermiData.read_var('den',kprint).
+        weight: string
+            sum up 'mass' or 'volume'. Default is 'mass'.
+        direction: string
+            sum up along which direction. The value can be 'z', 'R', or 'r'. Default is 'r'.
+        interval: int
+            interval for sampling coordination in direction. Default is 5.
+
+    Returns:
+        sumup: numpy.ndarray
+
+    Example:
+        >>> data = FermiData(dirpath='./data/fermi/')
+        >>> x = data.read_coord('x')
+        >>> den4 = data.read_var('den', 4)
+        >>> summass = count_enclosed(x, den4)
+    """
+
+    rr, zz = np.meshgrid(coord, coord)
+    dz = np.diff(zz, axis=0)[:,:-1]
+    dr2 = np.diff(rr*rr)[:-1]
+    dvol = np.pi*dr2*dz
+
+    if weight == 'volume':
+        mcell = dvol
+    elif weight == 'mass':
+        mcell = den*dvol
+
+    if direction == 'z':
+        dirtn = zz
+    elif direction == 'R':
+        dirtn = rr
+    elif direction == 'r':
+        rad = np.sqrt(zz*zz+rr*rr)
+        dirtn = rad
+        
+    sumup = [mcell[dirtn[1::,1::]<=loc].sum() for loc in coord[1::interval]]
+
+    return sumup
+
+    
+
+
+
+
+# class Image(object):
+    # continue
+
 
 def find_nearst(arr,target):
     """get the index of nearest value

@@ -9,17 +9,20 @@ Licensed under the MIT License, see LICENSE file for details
 """
 
 
+import os
+import sys
 import numpy as np
 import pandas as pd
 from astropy import units as u
 from astropy import constants as cons
-import os
-import sys
+from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 from skpy.utilities.logger import fmLogger as mylog
 
 PARA = "Parameter: {0:<20}\t = {1:<10}"
 PROP = "Property: {0:<20}\t = {1:<10}"
 DIME = "Dimension: {0:<20}\t : {1:<10}"
+
 
 class FermiData(object):
     """Tools for reading output data of fermi.f
@@ -41,7 +44,7 @@ class FermiData(object):
             the numver of logarithmic spaced grids.
         ezone: float
             the length of even spaced region.
-        zone: int
+        izone: int
             the number of total grids in one direction. (both directions are same.)
         reso: float
             the resolution for the even spaced grids.
@@ -63,7 +66,7 @@ class FermiData(object):
             self.iezone = int(dims[0])
             self.ilzone = int(dims[1])
             self.ezone = float(dims[2])
-            self.zone = self.iezone + self.ilzone
+            self.izone = self.iezone + self.ilzone
             self.reso = self.ezone/self.iezone
             self.kprint = self.inp[20].split()[:-1]
 
@@ -96,7 +99,6 @@ class FermiData(object):
         para = line[col]
 
         return para
-
 
 
     def read_coord(self, var):
@@ -135,7 +137,7 @@ class FermiData(object):
                 in the unit of kpc^-3
         """
 
-        coord = self.read_coord('x')
+        coord = self.read_coord('x') * u.kpc.to(u.cm)
         rr, zz = np.meshgrid(coord, coord)
         dz = np.diff(zz, axis=0)[:,:-1]
         dr2 = np.diff(rr*rr)[:-1]
@@ -157,8 +159,28 @@ class FermiData(object):
         Rh, zh = np.meshgrid(coord, coord)
         theta = np.arctan(Rh/zh)*u.rad.to(u.deg)
         return theta
-        
 
+
+    def get_radius(self, var):
+        """get distance from origion
+
+        In the cylindrical symmetric coordinate, this distance from the origin r^2 = R^2 + z^2
+
+        Args:
+            var: str
+                grid boundary 'x' or grid center 'xh'.
+        Return:
+            rh: numpy.ndarray
+                in the unit of kpc
+        """
+
+        coord = self.read_coord(var)
+        Rh, zh = np.meshgrid(coord, coord)
+        rh = np.sqrt(Rh*Rh+zh*zh)
+
+        return rh
+
+        
     def read_var(self, var, kprint):
         """read '*ascii.out*' variable outputs.
 
@@ -195,7 +217,7 @@ class FermiData(object):
         data = np.fromfile(file,dtype=float,sep=" ")
         dmax = data.max()
         dmin = data.min()
-        data = data.reshape([self.zone,self.zone])
+        data = data.reshape([self.izone,self.izone])
         data = data.T  # reverse index from fortran
         mylog.info(PROP.format("(min, max)",f"({dmin}, {dmax})"))
 
@@ -251,6 +273,7 @@ def meshgrid(coord,rrange,zrange):
     mylog.info(DIME.format('xh', f'z-{R.shape[0]} R-{R.shape[1]}'))
 
     return R, z
+
 
 def mesh_var(data, var, meshgrid):
     """construct meshgrid based on variable data.
@@ -336,7 +359,7 @@ def slice_mesh(data, coord, direction='z', kpc=0):
         raise ValueError("Only 'z' and 'r' are allowed.")
 
 
-def count_enclosed(coord, den, weight='mass', direction='r', interval=5):
+def count_enclosed(coord, den, weight='mass', direction='r', interval=1):
     """ sum up the grids inside out.
 
     given a direction, sum up mass or volume of the grids inside out and output a profile.
@@ -363,6 +386,7 @@ def count_enclosed(coord, den, weight='mass', direction='r', interval=5):
         >>> summass = count_enclosed(x, den4)
     """
 
+    coord = coord*u.kpc.to(u.cm)
     rr, zz = np.meshgrid(coord, coord)
     dz = np.diff(zz, axis=0)[:,:-1]
     dr2 = np.diff(rr*rr)[:-1]
@@ -383,15 +407,51 @@ def count_enclosed(coord, den, weight='mass', direction='r', interval=5):
         
     sumup = [mcell[dirtn[1::,1::]<=loc].sum() for loc in coord[1::interval]]
 
-    return sumup
+    return np.ndarray(sumup)
+
+    
+def average(coord, var, interval=1, weights=None):
+    """average the properties of the cells within the same spherical shell
 
     
 
+    """
+    
+    Rh, zh = np.meshgrid(coord, coord)
+    rh = np.sqrt(Rh*Rh+zh*zh)
+
+    if not rh.shape == var.shape:
+        mylog.error(f"Coordinate should be grid-centric.")
+
+    if weights is not None and weights.shape != var.shape:
+        mylog.error(f"The shape of weights {weights.shape} do not match the shape of variables {var.shape}.")
+
+    rhflt = rh.flatten()
+    varflt = var.flatten()
+
+    bins = np.arange(0, coord.max(), interval)
+    indic = np.digitize(rhflt,bins)
+    avevar = np.zeros_like(bins)
+
+    for i in np.arange(1,bins.size+1):
+        varmsk = varflt[indic==i]
+        if weights is not None:
+            wflt = weights.flatten()
+            wts = wflt[indic==i]
+            avevar[i-1] = np.average(varmsk, weights=wts)
+        else:
+            avevar[i-1] = np.average(varmsk)
+        
+    return bins, avevar
 
 
 
-# class Image(object):
-    # continue
+# class FermiImage(Figure):
+    # """ Plot 1D profile
+# 
+    # """
+    # def __init__(self, figure_size, fontsize):
+        # super(FermiImage, self).__init__(figsize=figure_size,)
 
 
 def find_nearst(arr,target):
@@ -414,7 +474,3 @@ def latex_float(f):
         return r"{0} \times 10^{{{1}}}".format(base, int(exponent))
     else:
         return float_str
-
-if __name__ == "__main__":
-    import doctest
-    doctest.testmod()

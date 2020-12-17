@@ -12,6 +12,8 @@ Licensed under the MIT License, see LICENSE file for details
 import numpy as np
 from astropy import constants as cons
 from astropy import units as u
+from skpy.utilities.logger import fmLogger as mylog
+
 
 
 def Ledd(mbh):
@@ -76,10 +78,9 @@ def cs(gamma=5./3., mu=0.61, **kw):
         131.13606kms
     """
 
-    if 'T' in kw:
+    if ('T' in kw):
         T = kw['T']
         cs = np.sqrt(gamma* cons.k_B * T / (mu* cons.m_p))
-
     else:
         try:
             P = kw['P']
@@ -91,6 +92,7 @@ def cs(gamma=5./3., mu=0.61, **kw):
             print('Such error is unexpected, so explore the cause by yourself')
         
     return cs.to(u.km/u.s)
+
 
 def vkep(m, r=1.*u.kpc):
     """Keplerian velocity
@@ -104,6 +106,7 @@ def vkep(m, r=1.*u.kpc):
 
     vkep = cons.G * m / r
     return vkep.to(u.km/u.s)
+
 
 def eos(mu=0.61, **kw):
     """ Equation of State
@@ -126,12 +129,76 @@ def eos(mu=0.61, **kw):
     """
     
     coeff = (cons.k_B / mu / cons.m_p).cgs.value
-    if 'T' in kw and 'P' in kw:
+    if ('T' in kw and 'P' in kw):
         result = coeff * P * T
-    elif 'T' in kw and 'P' in kw:
+    elif ('T' in kw and 'P' in kw):
         result = kw['P'] / kw['T'] / coeff
-    elif 'P' in kw and 'rho' in kw:
+    elif ('P' in kw and 'rho' in kw):
         result = kw['P'] / kw['rho'] / coeff
     else:
         raise KeyError('Two values among T, rho and P shouled be given.')
     return result
+
+
+def radcool(temp, zmetal):
+    """ Cooling Function
+
+    This version redefines Lambda_sd
+    (rho/m_p)^2 Lambda(T,z) is the cooling in erg/cm^3 s
+
+    Args:
+        temp : temperature in the unit of K
+        zmetal: metallicity in the unit of solar metallicity
+
+    Return:
+        in the unit of erg*s*cm^3
+    """
+
+    tshape = temp.shape
+    tempflt = temp.flatten()
+    
+    qlog0 = np.zeros_like(tempflt)
+    qlog1 = np.zeros_like(tempflt)
+
+    for i, t in enumerate(tempflt):
+        tlog = np.log10(t)
+
+        # zero metal cooling coefficient Lambda_([Fe/H]=0
+        if tlog>=6.1:
+            qlog0[i] = -26.39 + 0.471*(np.log10(t + 3.1623e6))
+        elif tlog>=4.9:
+            arg = 10.**(-(tlog-4.9)/.5) + 0.077302
+            qlog0[i] = -22.16 + np.log10(arg)
+        elif tlog>=4.25:
+            bump1rhs = -21.98 - ((tlog-4.25)/0.55)
+            bump2lhs = -22.16 - ((tlog-4.9)/0.284)**2
+            qlog0[i] = max(bump1rhs,bump2lhs)
+        else:
+            qlog0[i] = -21.98 - ((tlog-4.25)/0.2)**2
+
+        if qlog0[i]==np.nan: mylog.warning('There is NaN.')
+        
+        # emission from metals alone at solar abundance
+        if tlog>=5.65:
+            tlogc = 5.65
+            qlogc = -21.566
+            qloginfty = -23.1
+            p = 0.8
+            qlog1[i] = qlogc -p*(tlog - tlogc)
+            qlog1[i] = max(qlog1[i],qloginfty)
+        else:         
+            tlogm = 5.1
+            qlogm = -20.85
+            sig = 0.65
+            qlog1[i] = qlogm - ((tlog - tlogm)/sig)**2
+
+    qlambda0 = 10.**qlog0
+
+    qlambda1 = 10.**qlog1
+
+    # final cooling coefficient Lambda_sd:
+    radcoolsd = qlambda0 + zmetal.flatten()*qlambda1
+    radcoolsd = radcoolsd.reshape(tshape)
+    
+
+    return radcoolsd

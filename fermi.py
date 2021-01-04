@@ -359,10 +359,8 @@ def slice_mesh(data, coord, direction='z', kpc=0):
         raise ValueError("Only 'z' and 'r' are allowed.")
 
 
-def count_enclosed(coord, den, weight='mass', direction='r', interval=1):
-    """ sum up the grids inside out.
-
-    given a direction, sum up mass or volume of the grids inside out and output a profile.
+def cumsum(data, den, weight='mass', direction='r', interval=1):
+    """ Return the cumulative sum of the elements along a given direction.
 
     Args:
         coord: numpy.ndarray
@@ -381,16 +379,14 @@ def count_enclosed(coord, den, weight='mass', direction='r', interval=1):
 
     Example:
         >>> data = FermiData(dirpath='./data/fermi/')
-        >>> x = data.read_coord('x')
         >>> den4 = data.read_var('den', 4)
-        >>> summass = count_enclosed(x, den4)
+        >>> summass = cumsum(data, den4)
     """
 
-    coord = coord*u.kpc.to(u.cm)
-    rr, zz = np.meshgrid(coord, coord)
-    dz = np.diff(zz, axis=0)[:,:-1]
-    dr2 = np.diff(rr*rr)[:-1]
-    dvol = np.pi*dr2*dz
+    dvol = data.get_dvolume()
+    x = data.read_coord('x')
+    xh = data.read_coord('xh')
+    rh, zh = np.meshgrid(xh,xh)
 
     if weight == 'volume':
         mcell = dvol
@@ -398,26 +394,46 @@ def count_enclosed(coord, den, weight='mass', direction='r', interval=1):
         mcell = den*dvol
 
     if direction == 'z':
-        dirtn = zz
+        dirtn = zh
     elif direction == 'R':
-        dirtn = rr
+        dirtn = rh
     elif direction == 'r':
-        rad = np.sqrt(zz*zz+rr*rr)
-        dirtn = rad
+        rh = data.get_radius('xh')
+        dirtn = rh
         
-    sumup = [mcell[dirtn[1::,1::]<=loc].sum() for loc in coord[1::interval]]
+    bins = np.arange(1,x.max()+0.01,interval)
+    sumup = [mcell[dirtn<=loc].sum() for loc in bins]
 
     return np.ndarray(sumup)
 
     
-def average(coord, var, interval=1, weights=None):
+def average(data, var, interval=1, weights=None):
     """average the properties of the cells within the same spherical shell
 
-    
+    given data and array of a certain property, the whole region will be divided into spherical shells. 
+    A certain property of gas within each shell will be averaged or weighted averaged, if necessary.
 
+    Returns:
+        bins: numpy.ndarray
+            shell boundary coordinate, in the unit of kpc.
+        avevar: the averaged or weighted averaged value of the property for each shell.
+
+    Examples:
+        >>> data = FermiData(dirpath='./data/fermi/')
+        >>> den = data.read_var('den',5)
+        >>> e = data.read_var('e',5)
+        >>> p = 0.6667*e
+        >>> temp = eqs.eos(P=p, rho=den)
+        >>> z = data.read_var('z',5)
+        >>> lbd = eqs.radcool(temp, z)
+        >>> dvol = data.get_dvolume()
+        >>> rad = (den/cons.m_p.cgs.value)**2 * dvol * lbd
+        >>> bins, avetemp = average(xh, temp5, weights=rad)
     """
     
-    Rh, zh = np.meshgrid(coord, coord)
+    xh = data.read_coord('xh')
+    x = data.read_coord('x')
+    Rh, zh = np.meshgrid(xh, xh)
     rh = np.sqrt(Rh*Rh+zh*zh)
 
     if not rh.shape == var.shape:
@@ -429,7 +445,7 @@ def average(coord, var, interval=1, weights=None):
     rhflt = rh.flatten()
     varflt = var.flatten()
 
-    bins = np.arange(0, coord.max(), interval)
+    bins = np.arange(0, x.max(), interval)
     indic = np.digitize(rhflt,bins)
     avevar = np.zeros_like(bins)
 

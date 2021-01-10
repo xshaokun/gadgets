@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """astroeqs.py - commonly used formulae.
 
-Last Modified: 2020.05.28
+Last Modified: 2021.01.03
 
 Copyright(C) 2020 Shaokun Xie <https://xshaokun.com>
 Licensed under the MIT License, see LICENSE file for details

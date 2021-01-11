@@ -10,7 +10,7 @@ So far, the package includes the following modules:
 ## Installation
 First of all, download this module.
 
-In Python, a third-party module can be install temporarily, or permanently. 
+In Python, a third-party module can be installed temporarily, or permanently. 
 
 For temporarily using a module, you should implement the following code at the beginning of your script:
 

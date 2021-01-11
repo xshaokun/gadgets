@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 fermi.py - tools for analyzing outputs of fermi.f
-Last Modified: 2021.01.09
+Last Modified: 2021.01.11
 
 Copyright(C) 2020 Shaokun Xie <https://xshaokun.com>
 Licensed under the MIT License, see LICENSE file for details
@@ -339,7 +339,7 @@ def mesh_var(data, meshgrid, flip=False):
     zrange = meshgrid.shape[0]
     rrange = int(meshgrid.shape[1]/2)
 
-    mylog.info(f"====> calling function [mesh_var] {var}: construct the region within {meshgrid.max()} kpc.")
+    mylog.info(f"====> calling function [mesh_var]: construct the region within {meshgrid.max()} kpc.")
 
     meshr = data[:zrange,:rrange]
 
@@ -351,7 +351,7 @@ def mesh_var(data, meshgrid, flip=False):
 
     mesh = np.hstack((meshl,meshr))
 
-    mylog.info(DIME.format(f'{var}', f'z-{mesh.shape[0]}, R-{mesh.shape[1]}'))
+    mylog.info(DIME.format(f'mesh_var', f'z-{mesh.shape[0]}, R-{mesh.shape[1]}'))
 
     return mesh
 
@@ -508,11 +508,19 @@ class Image(object):
 
     """
     def __init__(self, figsize=(10,8), loc='./', dest=None):
-        self.figsize = figsize
         self.loc = loc
         self.dest = dest
+        self.figsize = figsize
+        self.fig = plt.figure(figsize=self.figsize, dpi=300)
 
-    def sliceplot(self, var, kprint, dir='z', offset=0, xlim=None, ylim=None, xlog=False, ylog=True):
+    # def __str__(self):
+        # return self
+
+    def show(self):
+        plt.legend(frameon=False)
+        return plt.show()
+
+    def line(self, var, kprint, dir='z', offset=0, xlim=None, ylim=None, xlog=False, ylog=True):
         """ Show the 1D profile.
     
         Parameters:
@@ -528,8 +536,12 @@ class Image(object):
         """
     
         data = FermiData(dirpath=self.loc)
+        times = data.kprint
         if var in varlist:
             varr = data.read_var(var,kprint)
+        elif var=='ne':
+            den = data.read_var('den',kprint)
+            varr = den/qmue/mp
         elif var=='temp':
             den = data.read_var('den',kprint)
             press = data.read_var('e',kprint) * (gamma-1)
@@ -544,7 +556,7 @@ class Image(object):
         xh = data.read_coord('xh')
         profile = slice_mesh(varr, xh, direction=dir, offset=offset)
     
-        plt.plot(xh, profile)
+        plt.plot(xh, profile, label=f"t={times[kprint]} yr")
         if xlim: plt.xlim(min(xlim),max(xlim))
         if ylim: plt.ylim(min(ylim),max(ylim))
         if xlog: plt.xscale('log')
@@ -558,7 +570,7 @@ class Image(object):
             model = path.split('/')[-1]
             plt.savefig(f'{self.dest}sp-{var}{kprint}-{model}.jpg', dpi=300, bbox_inches='tight', pad_inches=0.02)
         else:
-            plt.show()
+            return self
 
 
     def display(self, var, kprint, value=None, region=(100,100), cmap='jet', nolog=False, notitle=False, flip=False):
@@ -598,16 +610,14 @@ class Image(object):
             nue = den/qmue/mp
             varr = temp/nue**(2./3.)
 
-        varr = mesh_var(den, R, flip=flip)
+        varr = mesh_var(varr, R, flip=flip)
         if not nolog:
             varr = np.log10(varr+1e-99)
 
-        fig = plt.figure(figsize=self.figsize)
-
         if value:
-            pcm = plt.pcolormesh(R,z,den,cmap=cmap,vmax=max(value),vmin=min(value))
+            pcm = plt.pcolormesh(R,z,varr,cmap=cmap,vmax=max(value),vmin=min(value))
         else:
-            pcm = plt.pcolormesh(R,z,den,cmap=cmap)
+            pcm = plt.pcolormesh(R,z,varr,cmap=cmap)
 
         # Set the attributes of plots
         plt.plot([],[], alpha=0, label=f"$t = {times[int(kprint)]}$ yr")
@@ -635,12 +645,14 @@ class Image(object):
 
         if self.dest:
             plt.savefig(f'{self.dest}dsp-{var}{kprint}-{model}.jpg', dpi=300, bbox_inches='tight', pad_inches=0.02)
-        else:
+        elif __name__ == "skpy.fermi":
+            return self
+        elif __name__ == "__main__":
             plt.show()
 
 
-    def averaged(self, var, kprint, interval=0.1, xlog=False, ylog=True, xlim=None, ylim=None):
-        data = FermiData(dirpath=self.dir)
+    def average(self, var, kprint, interval=0.1, xlog=False, ylog=False, xlim=None, ylim=None):
+        data = FermiData(dirpath=self.loc)
 
         dvol = data.get_dvolume()
         times = data.kprint
@@ -667,7 +679,7 @@ class Image(object):
         else:
             raise ValueError(f"Variable {var} is not supported yet.")
 
-        bins, avevar = fm.average(data, varr, interval=interval, weights=rad)
+        bins, avevar = average(data, varr, interval=interval, weights=rad)
         plt.plot(bins,avevar, label=f"t={times[kprint]} yr")
 
         if xlim: plt.xlim(min(xlim),max(xlim))
@@ -675,7 +687,7 @@ class Image(object):
         plt.xlabel('Radius (kpc)')
         if ylim: plt.ylim(min(ylim),max(ylim))
         if ylog: plt.yscale('log')
-        plt.ylabel('Temperature (K)')
+        if(variables.get(var)): plt.ylabel(variables.get(var))
         plt.legend(frameon=False)
 
         if self.dest:
@@ -683,7 +695,7 @@ class Image(object):
             model = path.split('/')[-1]
             plt.savefig(f'{self.dest}ave-{var}{kprint}-{model}.jpg', dpi=300, bbox_inches='tight', pad_inches=0.02)
         else:
-            plt.show()
+            return self
 
 
 
@@ -711,3 +723,4 @@ def latex_float(f):
 
 if __name__ == "__main__":
 	fire.Fire(Image)
+    

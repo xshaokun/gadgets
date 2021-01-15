@@ -31,7 +31,6 @@ DIME = "Dimension: {0:<20}\t : {1:<10}"
 # matplotlib setup
 mpl.rcParams['mathtext.fontset'] = 'cm'
 mpl.rcParams['font.family'] = 'serif'
-mpl.rcParams['axes.titlepad'] = 40
 
 # axis label for variables
 variables = {
@@ -507,11 +506,11 @@ class Image(object):
     dest : str. Destination for saving the figure. None means not saving but prompt a window to preview. Default: None
 
     """
-    def __init__(self, figsize=(10,8), loc='./', dest=None):
+    def __init__(self, loc='./', dest=None, figsize=(10,8)):
         self.loc = loc
         self.dest = dest
         self.figsize = figsize
-        self.fig = plt.figure(figsize=self.figsize, dpi=300)
+        self.fig = plt.figure(figsize=self.figsize, dpi=300, tight_layout=True)
 
     # def __str__(self):
         # return self
@@ -520,7 +519,7 @@ class Image(object):
         plt.legend(frameon=False)
         return plt.show()
 
-    def line(self, var, kprint, dir='z', offset=0, xlim=None, ylim=None, xlog=False, ylog=True):
+    def line(self, var, kprint, dir='z', offset=0, **kwargs):
         """ Show the 1D profile.
     
         Parameters:
@@ -529,10 +528,13 @@ class Image(object):
         kprint : int. Index of the output file.
         dir : str. The direction of the profile. Default: 'z'
         offset : int or float. The distance away from the another axis. Default: 0
-        xlim : tuple. Default: None.
-        ylim : tuple. Default: None.
-        xlog : bool. Default: False.
-        ylog : bool. Default: True.
+
+        **kwargs:
+        ---------
+        xlim : tuple. Default: None
+        ylim : tuple. Default: None
+        xlog : bool. Default: False
+        ylog : bool. Default: True
         """
     
         data = FermiData(dirpath=self.loc)
@@ -557,10 +559,10 @@ class Image(object):
         profile = slice_mesh(varr, xh, direction=dir, offset=offset)
     
         plt.plot(xh, profile, label=f"t={times[kprint]} yr")
-        if xlim: plt.xlim(min(xlim),max(xlim))
-        if ylim: plt.ylim(min(ylim),max(ylim))
-        if xlog: plt.xscale('log')
-        if ylog: plt.yscale('log')
+        if 'xlim' in kwargs: plt.xlim(min(kwargs['xlim']),max(kwargs['xlim']))
+        if 'ylim' in kwargs: plt.ylim(min(kwargs['ylim']),max(kwargs['ylim']))
+        if 'xlog' in kwargs: plt.xscale('log')
+        if 'ylog' in kwargs: plt.yscale('log')
 
         if(variables.get(var)): plt.ylabel(variables.get(var))
         if(direction.get(dir)): plt.xlabel(direction.get(dir))
@@ -581,15 +583,18 @@ class Image(object):
 
         Parameters:
         -----------
-        var : str. Prefix of the variable output file.
-        kprint : int. Index of the output file.
-        value : tuple. Value range to display. If not specify, it would be the range of 2D data.
+        var : str. Prefix of the variable output file
+        kprint : int. Index of the output file
+        value : tuple. Value range to display. If not specify, it would be the range of 2D data
         region : tuple. The outer limit of plotting region, R-axis first. Default: (100,100)
         cmap : str. Default: 'jet'
         nolog : Bool. Default: False
         notitle : Bool. Default: False
         flip : Bool. Set True only for v_R. Default: False
         """
+
+        mpl.rcParams['axes.titlepad'] = 40
+
 
         rrange, zrange = region
 
@@ -599,6 +604,9 @@ class Image(object):
         R,z = meshgrid(xh,rrange,zrange)
         if var in varlist:
             varr = data.read_var(var,kprint)
+        elif var=='ne':
+            den = data.read_var('den',kprint)
+            varr = den/qmue/mp
         elif var=='temp':
             den = data.read_var('den',kprint)
             press = data.read_var('e',kprint) * (gamma-1)
@@ -651,23 +659,30 @@ class Image(object):
             plt.show()
 
 
-    def average(self, var, kprint, interval=0.1, xlog=False, ylog=False, xlim=None, ylim=None):
+    def average(self, var, kprint, interval=0.1, **kwargs):
+        """Weighted average the cells within the same spherical bins.
+
+        Parameters:
+        -----------
+        var : str. Prefix of the variable output file
+        kprint :  int. Index of the output file
+        interval : float. Width of the spherical bins
+
+        **kwargs:
+        ---------
+        xlim : tuple. Default: None
+        ylim : tuple. Default: None
+        xlog : bool. Default: False
+        ylog : bool. Default: False
+        """
+
+
         data = FermiData(dirpath=self.loc)
 
         dvol = data.get_dvolume()
         times = data.kprint
 
-        if var in varlist:
-            varr = data.read_var(var,kprint)
-            # Calculate weights
-            e = data.read_var('e',kprint)
-            den = data.read_var('den',kprint)
-            z = data.read_var('z',kprint)
-            p = (gamma-1)*e
-            temp = eqs.eos(P=p,rho=den)
-            lbda = eqs.radcool(temp,z)
-            rad = (den/mp)**2*dvol*lbda
-        elif var=='temp':
+        if var=='temp':
             den = data.read_var('den',kprint)
             press = data.read_var('e',kprint) * (gamma-1)
             temp = eqs.eos(P=press, rho=den)
@@ -677,16 +692,36 @@ class Image(object):
             lbda = eqs.radcool(temp,z)
             rad = (den/mp)**2*dvol*lbda
         else:
-            raise ValueError(f"Variable {var} is not supported yet.")
+            if var in varlist:
+                varr = data.read_var(var,kprint)
+            elif var=='ne':
+                den = data.read_var('den',kprint)
+                varr = den/qmue/mp
+            elif var=='entr':
+                den = data.read_var('den',kprint)
+                press = data.read_var('e',kprint) * (gamma-1)
+                temp = eqs.eos(P=press, rho=den)
+                nue = den/qmue/mp
+                varr = temp/nue**(2./3.)
+            else:
+                raise ValueError(f"Variable {var} is not supported yet.")
+            # Calculate weights
+            e = data.read_var('e',kprint)
+            den = data.read_var('den',kprint)
+            z = data.read_var('z',kprint)
+            p = (gamma-1)*e
+            temp = eqs.eos(P=p,rho=den)
+            lbda = eqs.radcool(temp,z)
+            rad = (den/mp)**2*dvol*lbda
 
         bins, avevar = average(data, varr, interval=interval, weights=rad)
         plt.plot(bins,avevar, label=f"t={times[kprint]} yr")
 
-        if xlim: plt.xlim(min(xlim),max(xlim))
-        if xlog: plt.xscale('log')
+        if 'xlim' in kwargs: plt.xlim(min(kwargs['xlim']),max(kwargs['xlim']))
+        if 'xlog' in kwargs: plt.xscale('log')
         plt.xlabel('Radius (kpc)')
-        if ylim: plt.ylim(min(ylim),max(ylim))
-        if ylog: plt.yscale('log')
+        if 'ylim' in kwargs: plt.ylim(min(kwargs['ylim']),max(kwargs['ylim']))
+        if 'ylog' in kwargs: plt.yscale('log')
         if(variables.get(var)): plt.ylabel(variables.get(var))
         plt.legend(frameon=False)
 
@@ -694,6 +729,43 @@ class Image(object):
             path = data.dir_path
             model = path.split('/')[-1]
             plt.savefig(f'{self.dest}ave-{var}{kprint}-{model}.jpg', dpi=300, bbox_inches='tight', pad_inches=0.02)
+        else:
+            return self
+
+
+    def hist(self, var, key, skiprows=2, **kwargs):
+        """Show the evolution over time.
+
+        Parameters:
+        -----------
+        var : str. Prefix of the variable output file
+        kprint :  int. Index of the output file
+        skiprows : int. Number of lines to skip when reading the file
+
+        **kwargs:
+        ---------
+        xlim : tuple. Default: None
+        ylim : tuple. Default: None
+        xlog : bool. Default: False
+        ylog : bool. Default: False
+        """
+
+
+        data = FermiData(dirpath=self.loc)
+        df = data.read_hist(var, skiprows=skiprows)
+        plt.plot(df[key], label=key)
+
+        if 'xlim' in kwargs: plt.xlim(min(kwargs['xlim']),max(kwargs['xlim']))
+        if 'xlog' in kwargs: plt.xscale('log')
+        plt.xlabel('t (yr)')
+        if 'ylim' in kwargs: plt.ylim(min(kwargs['ylim']),max(kwargs['ylim']))
+        if 'ylog' in kwargs: plt.yscale('log')
+        plt.legend(frameon=False)
+
+        if self.dest:
+            path = data.dir_path
+            model = path.split('/')[-1]
+            plt.savefig(f'{self.dest}hist-{model}.jpg', dpi=300, bbox_inches='tight', pad_inches=0.02)
         else:
             return self
 

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 fermi.py - tools for analyzing outputs of fermi.f
-Last Modified: 2021.01.11
+Last Modified: 2021.01.27
 
 Copyright(C) 2020 Shaokun Xie <https://xshaokun.com>
 Licensed under the MIT License, see LICENSE file for details
@@ -24,9 +24,9 @@ import fire
 
 
 # format for log
-PARA = "Parameter: {0:<20}\t = {1:<10}"
-PROP = "Property: {0:<20}\t = {1:<10}"
-DIME = "Dimension: {0:<20}\t : {1:<10}"
+PARA = "Parameter : {0:<20}\t = {1:<10}"
+PROP = "========>   {0:<20}\t = {1:<10}"
+DIME = "========>   {0:<20}\t : {1:<10}"
 
 # matplotlib setup
 mpl.rcParams['mathtext.fontset'] = 'cm'
@@ -153,11 +153,9 @@ class FermiData(object):
         """
 
         filename = f"{self.dir_path}/{var}ascii.out"
-        mylog.info(f"====> call method {sys._getframe().f_code.co_name}(var={var})")
-
 
         x = np.fromfile(filename,sep=" ") * u.cm.to(u.kpc)
-        mylog.info(DIME.format(f"{var}",f"{x.shape}"))
+        mylog.info(DIME.format(f"import {var}",f"{x.shape}"))
         return x
 
 
@@ -235,7 +233,6 @@ class FermiData(object):
             >>> data.read_var('den', 1)
         """
 
-        mylog.info(f"====> call method {sys._getframe().f_code.co_name}(var={var}, kprint={kprint})")
         if var == 'uz':
             var = 'ux'
         if var == 'ur':
@@ -253,7 +250,7 @@ class FermiData(object):
         dmin = data.min()
         data = data.reshape([self.izone,self.izone])
         data = data.T  # reverse index from fortran
-        mylog.info(PROP.format("(min, max)",f"({dmin}, {dmax})"))
+        mylog.info(PROP.format(f"import {var}{kprint}(min, max)",f"({dmin}, {dmax})"))
 
         return data
 
@@ -273,9 +270,9 @@ class FermiData(object):
             df : pandas.DataFrame
         """
 
+        mylog.info(PROP.format(f"import {var}c.out", f"skiprows={skiprows})"))
         path = f"{self.dir_path}/{var}c.out"
         df = pd.read_csv(path,skiprows=skiprows,delim_whitespace=True,index_col='tyr')
-        mylog.info(f"====> call method {sys._getframe().f_code.co_name}(var={var}, skiprows={skiprows})")
 
         return df
 
@@ -753,7 +750,11 @@ class Image(object):
 
         data = FermiData(dirpath=self.loc)
         df = data.read_hist(var, skiprows=skiprows)
-        plt.plot(df[key], label=key)
+        if 'unit' in kwargs: 
+            plt.plot(df[key]/df.loc[df.index.min(),key], label=key)
+            print(kwargs)
+        else:
+            plt.plot(df[key], label=key)
 
         if 'xlim' in kwargs: plt.xlim(min(kwargs['xlim']),max(kwargs['xlim']))
         if 'xlog' in kwargs: plt.xscale('log')
@@ -769,6 +770,39 @@ class Image(object):
         else:
             return self
 
+
+    def grid(self, var, **kwargs):
+        """Show the grid structure.
+
+        Parameter:
+        ----------
+        var : str. Prefix of the coordinate file.
+
+        **kwargs:
+        ---------
+        xlim : tuple. Default: None
+        ylim : tuple. Default: None  
+        """
+
+        data = FermiData(dirpath=self.loc)
+        coord = data.read_coord(var)
+        Rcoord, zcoord = np.meshgrid(coord,coord)
+
+        plt.scatter(Rcoord, zcoord, s=0.5, linewidths=0)
+
+        if 'xlim' in kwargs: plt.xlim(min(kwargs['xlim']),max(kwargs['xlim']))
+        plt.xlabel('R (kpc)')
+        if 'ylim' in kwargs: plt.ylim(min(kwargs['ylim']),max(kwargs['ylim']))
+        plt.ylabel('z (kpc)')
+
+        if self.dest:
+           path = data.dir_path
+           model = path.split('/')[-1]
+           plt.savefig(f'{self.dest}grid-{var}-{model}.jpg', dpi=300, bbox_inches='tight', pad_inches=0.02)
+        elif __name__ == "skpy.fermi":
+            return self
+        elif __name__ == "__main__":
+            plt.show()
 
 
 def find_nearst(arr,target):

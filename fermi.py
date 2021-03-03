@@ -33,13 +33,14 @@ mpl.rcParams['mathtext.fontset'] = 'cm'
 mpl.rcParams['font.family'] = 'serif'
 
 # axis label for variables
-variables = {
+labels = {
     'den': r'Density (g/cm$^3$)',
-    'z': 'Metallicity',
-    'e': r'$E_\mathrm{th}$ (erg/cm$3$)',
+    'ne' : r'Electron Number Density (cm$^{-3}$)',
+    'z'  : r'Metallicity ($Z_\odot$)',
+    'e'  : r'$E_\mathrm{th}$ (erg/cm$3$)',
     'ecr': r'$E_\mathrm{CR}$ (erg/cm$3$)',
-    'ux': r'$v_z$ (km/s)',
-    'uy': r'$v_R$ (km/s)'
+    'ux' : r'$v_z$ (km/s)',
+    'uy' : r'$v_R$ (km/s)'
 }
 
 # axis label for coordinate
@@ -509,10 +510,10 @@ class Image(object):
         self.figsize = figsize
         self.fig = plt.figure(figsize=self.figsize, dpi=300, tight_layout=True)
 
-    # def __str__(self):
-        # return self
-
     def show(self):
+        """ show figure in prompt window
+        """
+
         plt.legend(frameon=False)
         return plt.show()
 
@@ -561,7 +562,7 @@ class Image(object):
         if 'xlog' in kwargs: plt.xscale('log')
         if 'ylog' in kwargs: plt.yscale('log')
 
-        if(variables.get(var)): plt.ylabel(variables.get(var))
+        if(labels.get(var)): plt.ylabel(labels.get(var))
         if(direction.get(dir)): plt.xlabel(direction.get(dir))
     
         if self.dest:
@@ -591,7 +592,6 @@ class Image(object):
         """
 
         mpl.rcParams['axes.titlepad'] = 40
-
 
         rrange, zrange = region
 
@@ -630,11 +630,6 @@ class Image(object):
 
         plt.ylabel(r"$z$ (kpc)")
         plt.xlabel(r"$R$ (kpc)")
-
-        path = data.dir_path
-        model = path.split('/')[-1]
-        if not notitle:
-            plt.title(model)
         
         # Set the aspect ratio
         ax = plt.gca()
@@ -642,13 +637,16 @@ class Image(object):
 
         # Add a new axes beside the plot to present colorbar
         divider = make_axes_locatable(ax)
-        cax = divider.append_axes("top", size="3%", pad=0.0)
-        cb = plt.colorbar(pcm, cax=cax,orientation='horizontal')
-        # Set the tick above colorbar
-        cax.xaxis.tick_top()
-        cax.xaxis.offsetText.set_x((1.05))
+        cax = divider.append_axes("right", size="2%", pad=0.0)
+        cb = plt.colorbar(pcm, cax=cax,orientation='vertical')
+        if nolog:
+            cb.ax.set_ylabel(labels[var])
+        else:
+            cb.ax.set_ylabel(r'$\log\;$'+labels[var])
 
         if self.dest:
+            path = data.dir_path
+            model = path.split('/')[-1]
             plt.savefig(f'{self.dest}dsp-{var}{kprint}-{model}.jpg', dpi=300, bbox_inches='tight', pad_inches=0.02)
         elif __name__ == "skpy.fermi":
             return self
@@ -672,7 +670,6 @@ class Image(object):
         xlog : bool. Default: False
         ylog : bool. Default: False
         """
-
 
         data = FermiData(dirpath=self.loc)
 
@@ -719,7 +716,7 @@ class Image(object):
         plt.xlabel('Radius (kpc)')
         if 'ylim' in kwargs: plt.ylim(min(kwargs['ylim']),max(kwargs['ylim']))
         if 'ylog' in kwargs: plt.yscale('log')
-        if(variables.get(var)): plt.ylabel(variables.get(var))
+        if(labels.get(var)): plt.ylabel(labels.get(var))
         plt.legend(frameon=False)
 
         if self.dest:
@@ -746,7 +743,6 @@ class Image(object):
         xlog : bool. Default: False
         ylog : bool. Default: False
         """
-
 
         data = FermiData(dirpath=self.loc)
         df = data.read_hist(var, skiprows=skiprows)

@@ -34,13 +34,14 @@ mpl.rcParams['font.family'] = 'serif'
 
 # axis label for variables
 labels = {
-    'den': r'Density (g/cm$^3$)',
-    'ne' : r'Electron Number Density (cm$^{-3}$)',
-    'z'  : r'Metallicity ($Z_\odot$)',
-    'e'  : r'$E_\mathrm{th}$ (erg/cm$3$)',
-    'ecr': r'$E_\mathrm{CR}$ (erg/cm$3$)',
-    'ux' : r'$v_z$ (km/s)',
-    'uy' : r'$v_R$ (km/s)'
+    'den'  : r'Density (g/cm$^3$)',
+    'ne'   : r'Electron Number Density (cm$^{-3}$)',
+    'z'    : r'Metallicity ($Z_\odot$)',
+    'e'    : r'$E_\mathrm{th}$ (erg/cm$3$)',
+    'ecr'  : r'$E_\mathrm{CR}$ (erg/cm$3$)',
+    'uz'   : r'$v_z$ (cm/s)',
+    'ur'   : r'$v_R$ (cm/s)',
+    'entr' : r'Entropy (keV cm$^2$)'
 }
 
 # axis label for coordinate
@@ -51,7 +52,7 @@ direction = {
 }
 
 # define some constants used in the code
-varlist = ['den', 'z', 'e', 'pot', 'ux', 'uy']
+varlist = ['den', 'z', 'e', 'pot', 'uz', 'ur']
 gamma = 5./3.
 qmu = 0.61
 qmue = 5*qmu/(2+qmu)
@@ -379,6 +380,7 @@ def slice_mesh(data, coord, direction='z', offset=0):
     """
 
     nu = find_nearst(coord, offset)
+    mylog.info(PARA.format('slice coordinate',coord[nu]*u.cm.to(u.kpc)))
 
     n_constant = 5.155e23  # num_den_electron = den * n_constant
 
@@ -517,7 +519,7 @@ class Image(object):
         plt.legend(frameon=False)
         return plt.show()
 
-    def line(self, var, kprint, dir='z', offset=0, **kwargs):
+    def line(self, var, kprint, dir='z', offset=0, norm=False, **kwargs):
         """ Show the 1D profile.
     
         Parameters:
@@ -526,6 +528,7 @@ class Image(object):
         kprint : int. Index of the output file.
         dir : str. The direction of the profile. Default: 'z'
         offset : int or float. The distance away from the another axis. Default: 0
+        norm : int or bool. If normalize the value and given by the specific kprint value. Default: False
 
         **kwargs:
         ---------
@@ -553,16 +556,42 @@ class Image(object):
             nue = den/qmue/mp
             varr = temp/nue**(2./3.)
 
-        xh = data.read_coord('xh')
-        profile = slice_mesh(varr, xh, direction=dir, offset=offset)
+        if not isinstance(norm,bool):
+            if var in varlist:
+                varr0 = data.read_var(var,norm)
+            elif var=='ne':
+                den0 = data.read_var('den',norm)
+                varr0 = den/qmue/mp
+            elif var=='temp':
+                den0 = data.read_var('den',norm)
+                press0 = data.read_var('e',norm) * (gamma-1)
+                varr0 = eqs.eos(P=press, rho=den)
+            elif var=='entr':
+                den0 = data.read_var('den',norm)
+                press0 = data.read_var('e',norm) * (gamma-1)
+                temp0 = eqs.eos(P=press, rho=den)
+                nue0 = den/qmue/mp
+                varr0 = temp/nue**(2./3.)
+            varr = varr/varr0
+        
+        if var=='uz' or var=='ur':
+            coord = data.read_coord('x')
+            coord = coord[:-1]
+        else:
+            coord = data.read_coord('xh')
+        profile = slice_mesh(varr, coord, direction=dir, offset=offset)
     
-        plt.plot(xh, profile, label=f"t={times[kprint]} yr")
+        plt.plot(coord, profile, label=f"t={times[kprint]} yr")
         if 'xlim' in kwargs: plt.xlim(min(kwargs['xlim']),max(kwargs['xlim']))
         if 'ylim' in kwargs: plt.ylim(min(kwargs['ylim']),max(kwargs['ylim']))
         if 'xlog' in kwargs: plt.xscale('log')
         if 'ylog' in kwargs: plt.yscale('log')
 
-        if(labels.get(var)): plt.ylabel(labels.get(var))
+        if labels.get(var):
+            if not isinstance(norm,bool):
+                plt.ylabel(labels.get(var)+'/'+labels.get(var)+f"$_{norm}$")
+            else:
+                plt.ylabel(labels.get(var))
         if(direction.get(dir)): plt.xlabel(direction.get(dir))
     
         if self.dest:
@@ -572,8 +601,46 @@ class Image(object):
         else:
             return self
 
+    def linearr(self, arr, dir='z', offset=0, **kwargs):
+        """ Show the 1D profile of given array.
+    
+        Parameters:
+        -----------
+        arr : numpy.ndarray. Variable array for y-axis.
+        dir : str. The direction of the profile. Default: 'z'
+        offset : int or float. The distance away from the another axis. Default: 0
 
-    def display(self, var, kprint, value=None, region=(100,100), cmap='jet', nolog=False, notitle=False, flip=False):
+        **kwargs:
+        ---------
+        xlim : tuple. Default: None
+        ylim : tuple. Default: None
+        xlog : bool. Default: False
+        ylog : bool. Default: False
+        """
+        
+        xh = data.read_coord('xh')
+        if xh.shape[0] == arr.shape[0]:
+            profile = slice_mesh(arr, xh, direction=dir, offset=offset)
+        else:
+            raise IndexError(f"Shape of variable and coordinate do not match: variable {arr.shape}, coord {xh.shape}")
+    
+        plt.plot(xh, profile, label=f"t={times[kprint]} yr")
+        if 'xlim' in kwargs: plt.xlim(min(kwargs['xlim']),max(kwargs['xlim']))
+        if 'ylim' in kwargs: plt.ylim(min(kwargs['ylim']),max(kwargs['ylim']))
+        if 'xlog' in kwargs: plt.xscale('log')
+        if 'ylog' in kwargs: plt.yscale('log')
+
+        if(kwargs.get(ylabel)): plt.ylabel(kwargs.get(ylabel))
+        if(direction.get(dir)): plt.xlabel(direction.get(dir))
+    
+        if self.dest:
+            path = data.dir_path
+            model = path.split('/')[-1]
+            plt.savefig(f'{self.dest}sp-{var}{kprint}-{model}.jpg', dpi=300, bbox_inches='tight')
+        else:
+            return self
+
+    def display(self, var, kprint, vlim=None, region=(100,100), cmap='jet', nolog=False, notitle=False, flip=False):
         """ Display a 2D data using the matplotlib's pcolormesh
 
         Except for the 2D data output by the code, 2D temperature and entropy can be
@@ -583,15 +650,13 @@ class Image(object):
         -----------
         var : str. Prefix of the variable output file
         kprint : int. Index of the output file
-        value : tuple. Value range to display. If not specify, it would be the range of 2D data
+        vlim : tuple. Value range to display. If not specify, it would be the range of 2D data
         region : tuple. The outer limit of plotting region, R-axis first. Default: (100,100)
         cmap : str. Default: 'jet'
         nolog : Bool. Default: False
         notitle : Bool. Default: False
         flip : Bool. Set True only for v_R. Default: False
         """
-
-        mpl.rcParams['axes.titlepad'] = 40
 
         rrange, zrange = region
 
@@ -614,13 +679,15 @@ class Image(object):
             temp = eqs.eos(P=press, rho=den)
             nue = den/qmue/mp
             varr = temp/nue**(2./3.)
+        elif type(var)==np.ndarray:
+            varr = var
 
         varr = mesh_var(varr, R, flip=flip)
         if not nolog:
             varr = np.log10(varr+1e-99)
 
-        if value:
-            pcm = plt.pcolormesh(R,z,varr,cmap=cmap,vmax=max(value),vmin=min(value))
+        if vlim:
+            pcm = plt.pcolormesh(R,z,varr,cmap=cmap,vmax=max(vlim),vmin=min(vlim))
         else:
             pcm = plt.pcolormesh(R,z,varr,cmap=cmap)
 
@@ -653,6 +720,67 @@ class Image(object):
         elif __name__ == "__main__":
             plt.show()
 
+    def displayarr(self, arr, vlim=None, region=(100,100), cmap='jet', nolog=False, notitle=False, flip=False, **kwargs):
+        """ Display a 2D data using the matplotlib's pcolormesh
+
+        Except for the 2D data output by the code, 2D temperature and entropy can be
+        calculated and displayed, so far.
+
+        Parameters:
+        -----------
+        arr : str. Prefix of the variable output file
+        vlim : tuple. Value range to display. If not specify, it would be the range of 2D data
+        region : tuple. The outer limit of plotting region, R-axis first. Default: (100,100)
+        cmap : str. Default: 'jet'
+        nolog : Bool. Default: False
+        notitle : Bool. Default: False
+        flip : Bool. Set True only for v_R. Default: False
+
+        **kwargs:
+        ---------
+        clabel: str. Label of colorbar.
+        """
+
+        rrange, zrange = region
+
+        varr = mesh_var(arr, R, flip=flip)
+        if not nolog:
+            varr = np.log10(varr+1e-99)
+
+        if vlim:
+            pcm = plt.pcolormesh(R,z,varr,cmap=cmap,vmax=max(vlim),vmin=min(vlim))
+        else:
+            pcm = plt.pcolormesh(R,z,varr,cmap=cmap)
+
+        # Set the attributes of plots
+        plt.plot([],[], alpha=0, label=f"$t = {times[int(kprint)]}$ yr")
+        plt.legend(frameon=False)
+
+        plt.ylabel(r"$z$ (kpc)")
+        plt.xlabel(r"$R$ (kpc)")
+        
+        # Set the aspect ratio
+        ax = plt.gca()
+        ax.set_aspect('equal')
+
+        # Add a new axes beside the plot to present colorbar
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="2%", pad=0.0)
+        cb = plt.colorbar(pcm, cax=cax,orientation='vertical')
+        if kwargs.get(clabel):
+            if nolog:
+                cb.ax.set_ylabel(kwargs.get(clabel))
+            else:
+                cb.ax.set_ylabel(r'$\log\;$'+kwargs.get(clabel))
+
+        if self.dest:
+            path = data.dir_path
+            model = path.split('/')[-1]
+            plt.savefig(f'{self.dest}dsp-{var}{kprint}-{model}.jpg', dpi=300, bbox_inches='tight', pad_inches=0.02)
+        elif __name__ == "skpy.fermi":
+            return self
+        elif __name__ == "__main__":
+            plt.show()
 
     def average(self, var, kprint, interval=0.1, **kwargs):
         """Weighted average the cells within the same spherical bins.
@@ -697,6 +825,8 @@ class Image(object):
                 temp = eqs.eos(P=press, rho=den)
                 nue = den/qmue/mp
                 varr = temp/nue**(2./3.)
+            elif type(var)==np.ndarray:
+                varr = var
             else:
                 raise ValueError(f"Variable {var} is not supported yet.")
             # Calculate weights

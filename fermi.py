@@ -41,7 +41,8 @@ labels = {
     'ecr'  : r'$E_\mathrm{CR}$ (erg/cm$3$)',
     'uz'   : r'$v_z$ (cm/s)',
     'ur'   : r'$v_R$ (cm/s)',
-    'entr' : r'Entropy (keV cm$^2$)'
+    'entr' : r'Entropy (keV cm$^2$)',
+    'temp' : r'Temperature (K)'
 }
 
 # axis label for coordinate
@@ -260,7 +261,6 @@ class FermiData(object):
     def read_hist(self, var, skiprows=2):
         """read '*c.out' history file.
 
-        var
         Args:
             var : str
                 the prefix of history file. For example: 'gasmass' for 'gasmassc.out'.
@@ -706,10 +706,11 @@ class Image(object):
         divider = make_axes_locatable(ax)
         cax = divider.append_axes("right", size="2%", pad=0.0)
         cb = plt.colorbar(pcm, cax=cax,orientation='vertical')
-        if nolog:
-            cb.ax.set_ylabel(labels[var])
-        else:
-            cb.ax.set_ylabel(r'$\log\;$'+labels[var])
+        if var in labels:
+            if nolog:
+                cb.ax.set_ylabel(labels[var])
+            else:
+                cb.ax.set_ylabel(r'$\log\;$'+labels[var])
 
         if self.dest:
             path = data.dir_path

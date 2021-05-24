@@ -87,7 +87,7 @@ def cs(gamma=5./3., mu=0.61, **kw):
             rho = kw['rho']
             cs = np.sqrt(gamma* P / rho)
         except KeyError as ke:
-            print(f"The keyword {ke} is unvalid, you should input either T or (P & rho)")
+            print(f"The keyword {kw} is unvalid, you should input either T or (P & rho)")
         else:
             print('Such error is unexpected, so explore the cause by yourself')
         

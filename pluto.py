@@ -41,14 +41,15 @@ class Image(object):
     dest : str. Destination for saving the figure. None means not saving but prom
 
     """
-    def __init__(self, **kwargs):
-        self.wdir = kwargs.get('w_dir', './')
-        self.datatype = kwargs.get('datatype', 'dbl')
+    def __init__(self, wdir='./', datatype='dbl'):
+        self.wdir = wdir
+        self.datatype = datatype
 
         hdr = ['time','dt','Nstep']
         self.log = pd.read_table(self.wdir+self.datatype+'.out',sep=' ', usecols=[1,2,3], names=hdr)  # read *.out log file
 
-        self.fig = plt.figure(figsize=kwargs.get('figsize',(5,4)), dpi=300, tight_layout=True)
+        self.fig = plt.figure(figsize=(5,4), dpi=300, tight_layout=True)
+
 
     def show(self):
         """ show figure in prompt window
@@ -57,7 +58,8 @@ class Image(object):
         plt.legend(frameon=False)
         return plt.show()
 
-    def display(self, ns, var, **kwargs):
+
+    def display(self, ns, var, log=True, **kwargs):
         """ Display a 2D data using the matplotlib's pcolormesh
 
         Parameters:
@@ -67,7 +69,7 @@ class Image(object):
 
         **kwargs:
         ---------
-        w_dir:     path to the directory which has the data files
+        wdir:     path to the directory which has the data files
         datatype:  Datatype (default is set to read .dbl data files)
         x1range:   List with min and max value of x1 coordinates for zooming 
         x2range:   List with min and max value of x2 coordinates for zooming 
@@ -84,12 +86,11 @@ class Image(object):
         """
 
         ns = self.NumberStep(ns)
-        D = pp.pload(ns, w_dir=kwargs.get('w_dir'), datatype=kwargs.get('datatype'), \
-            x1range=kwargs.get('x1range'), x2range=kwargs.get('x2range'), x3range=kwargs.get('x3range'))
+        D = pp.pload(ns, w_dir=kwargs.get('wdir', self.wdir), datatype=kwargs.get('datatype', self.datatype), x1range=kwargs.get('x1range'), x2range=kwargs.get('x2range'), x3range=kwargs.get('x3range'))
 
         x1 = D.x1
         x2 = D.x2
-        ds = getattr(D, var).T if kwargs.get('nolog') else np.log(getattr(D, var).T)
+        ds = np.log(getattr(D, var).T) if log else getattr(D, var).T
 
         ax1 = self.fig.add_subplot(111)
         ax1.set_aspect('equal')
@@ -105,12 +106,12 @@ class Image(object):
         divider = make_axes_locatable(ax1)
         cax = divider.append_axes("right", size="2%", pad=0.0)
         cb = plt.colorbar(pcm, cax=cax,orientation='vertical')
-        if kwargs.get('nolog'):
-            cb.ax.set_ylabel(varlist.get(var))
-        else:
+        if log:
             cb.ax.set_ylabel(r'$\log\;$'+varlist.get(var))
+        else:
+            cb.ax.set_ylabel(varlist.get(var))
 
-        plt.show()
+        return self
 
 
     def line(self, ns, var, dir, offset, **kwargs):
@@ -125,7 +126,7 @@ class Image(object):
 
         **kwargs:
         ---------
-        w_dir:     path to the directory which has the data files
+        wdir:     path to the directory which has the data files
         datatype:  Datatype (default is set to read .dbl data files)
         x1range:   List with min and max value of x1 coordinates for zooming 
         x2range:   List with min and max value of x2 coordinates for zooming 
@@ -133,13 +134,12 @@ class Image(object):
         """
 
         ns = self.NumberStep(ns)
-        D = pp.pload(ns, w_dir=kwargs.get('w_dir'), datatype=kwargs.get('datatype'), \
-            x1range=kwargs.get('x1range'), x2range=kwargs.get('x2range'), x3range=kwargs.get('x3range'))
+        D = pp.pload(ns, w_dir=kwargs.get('wdir', self.wdir), datatype=kwargs.get('datatype', self.datatype), x1range=kwargs.get('x1range'), x2range=kwargs.get('x2range'), x3range=kwargs.get('x3range'))
 
         # slice the data
-        x = D.x2 if dir=='x1' else D.x1
+        x = D.x1 if dir=='x1' else D.x2
         idx = nearst(getattr(D,dir), offset)
-        ds = getattr(D,var)[idx,:] if dir=='x1' else getattr(D,var)[:,idx]
+        ds = getattr(D,var)[:,idx] if dir=='x1' else getattr(D,var)[idx,:]
 
         plt.plot(x, ds, label=f"{dir}={offset}, t={D.SimTime:.3e}")
 

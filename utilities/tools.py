@@ -8,6 +8,9 @@ Copyright(C) 2021 Shaokun Xie <https://xshaokun.com>
 Licensed under the MIT License, see LICENSE file for details
 """
 
+import numpy as np
+
+
 def nearst(arr,target):
     """get the index of nearest value
 

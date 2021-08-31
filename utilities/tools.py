@@ -11,7 +11,7 @@ Licensed under the MIT License, see LICENSE file for details
 import numpy as np
 
 
-def nearst(arr,target):
+def nearest(arr,target):
     """get the index of nearest value
 
     Given a number, find out the index of the nearest element in an 1D array.
@@ -20,6 +20,8 @@ def nearst(arr,target):
         arr: array for searching
         target: target number
     """
-
-    index = np.abs(arr-target).argmin()
+    if target == None:
+        index = None
+    else:
+        index = np.abs(arr-target).argmin()
     return index

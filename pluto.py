@@ -63,16 +63,16 @@ class PlutoVarsInfo(object):
     # Physical variables
     # Value name / code_unit / dimension
     known_vars = {
-        "rho"   :  ("code_density",                          "density"),
-        "vx1"   :  ("code_velocity",                         "speed"),
-        "vx2"   :  ("code_velocity",                         "speed"),
-        "vx3"   :  ("code_velocity",                         "speed"),
-        "prs"   :  ("code_density*code_velocity**2",         "pressure"),
-        "spped" :  ("code_velocity",                         "spped"),
-        "temp"  :  ("u.K",                                   "temperature"),
-        "mass"  :  ("code_density*code_length**3",           "mass"),
-        "time"  :  ("code_length/code_veloctiy",             "time"),
-        "acc"   :  ("code_veloctiy**2/code_length",          "acceleration")
+        "rho"   :  ("code_density",                    "g/cm**3",         "density"),
+        "vx1"   :  ("code_velocity",                   "km/s",         "speed"),
+        "vx2"   :  ("code_velocity",                   "km/s",         "speed"),
+        "vx3"   :  ("code_velocity",                   "km/s",         "speed"),
+        "prs"   :  ("code_density*code_velocity**2",   "erg/cm**3",    "pressure"),
+        "speed" :  ("code_velocity",                   "km/s",         "spped"),
+        "temp"  :  ("u.K",                             "K",            "temperature"),
+        "mass"  :  ("code_density*code_length**3",     "Msun"          "mass"),
+        "time"  :  ("code_length/code_veloctiy",       "yr",           "time"),
+        "acc"   :  ("code_veloctiy**2/code_length",    "",      "acceleration")
     }
 
     # def __init__(self, code_unit):
@@ -123,7 +123,7 @@ class Dataset(object):
 
         # Three base units and default values in pluto code
         self.code_unit={
-            "code_density" : 1.0 * u.g/u.cm**2,
+            "code_density" : 1.0 * u.g/u.cm**3,
             "code_length"  : 1.0 * u.cm,
             "code_velocity": 1.0 * u.cm/u.s
         }
@@ -142,7 +142,7 @@ class Dataset(object):
                             expr = expr.replace('CONST', 'PlutoDefConstants().CONST')
                         self.code_unit[key] = eval(expr) * self.code_unit[key].unit
         else:
-            print('Could not open definitions.h! The values of attributes [geometry, code_units] did not update, you can specifiy them later manually.')
+            print('Could not open definitions.h! The values of attributes [geometry, code_units] did not update, you can specifiy them later, and assign units by in_code_unit() manually.')
 
 
     def __getitem__(self, index):
@@ -174,7 +174,7 @@ class Dataset(object):
             else:
                 return ns
         elif type(ns) is float:         #  given a specific [time], find [ns] corresponding nearst existed data [time].
-            return nearst(log_file['time'],ns)
+            return nearest(log_file['time'],ns)
         else:
             raise(TypeError(f"ns({ns}) should be int or float, now it is {type(ns)}."))
 
@@ -194,15 +194,10 @@ class Snapshot(Dataset):
     def __init__(self, ns, w_dir, datatype):
         super().__init__(w_dir, datatype)
 
-        code_density = u.def_unit('code_density', represents=self.code_unit['code_density'])
-        code_length = u.def_unit('code_length', represents=self.code_unit['code_length'])
-        code_velocity = u.def_unit('code_velocity', represents=self.code_unit['code_velocity'])
-        u.add_enabled_units([code_density, code_length, code_velocity])
-
         D = pp.pload(ns, w_dir=self.wdir, datatype=self.datatype)
         self.nstep = D.NStep
-        self.time = D.SimTime * code_length/code_velocity
-        self.dt = D.Dt * code_length/code_velocity
+        self.time = D.SimTime
+        self.dt = D.Dt
 
         grids_info = [
             "n1","n2","n3",                 # number of computational cells
@@ -219,14 +214,15 @@ class Snapshot(Dataset):
         ]
         self.coord = {}
         for key in coord_info:
-            self.coord[key] = getattr(D, key) * code_length
+            self.coord[key] = getattr(D, key)
 
         vars_info = {}
-        pluto_vars = PlutoVarsInfo.known_vars
         for var in self.vars:
-            vars_info[var] = getattr(D, var).T * eval(pluto_vars[var][0])
+            vars_info[var] = getattr(D, var).T
         self.vars = vars_info
-        
+
+        if 'definitions.h' in os.listdir(self.wdir):
+            self.in_code_unit()
 
     def __getitem__(self, key):
         return self.__vars_value[key]
@@ -237,7 +233,7 @@ class Snapshot(Dataset):
             if not isinstance(value, dict):
                 print(f'{attr:15}:  {value}')
 
-    def add_vars(self, name, value, unit=None, dimensions=None):
+    def add_vars(self, name, value, unit=None, dimensions=None): # in construction
         defined_vars = PlutoVarsInfo.known_vars
         if name in defined_vars:
             unit = eval(defined_vars[name][0])
@@ -251,15 +247,70 @@ class Snapshot(Dataset):
         else:
             pass
 
+    def in_code_unit(self):
+        """ Assign code units
+        """
+        code_density = u.def_unit('code_density', represents=self.code_unit['code_density'])
+        code_length = u.def_unit('code_length', represents=self.code_unit['code_length'])
+        code_velocity = u.def_unit('code_velocity', represents=self.code_unit['code_velocity'])
+        # u.add_enabled_units([code_density, code_length, code_velocity])
+
+        if isinstance(self.coord['x1'], u.Quantity):    # in case units are already assigned
+            for key in self.coord:
+                self.coord[key] = self.coord[key].to(code_length)
+            
+            pluto_vars = PlutoVarsInfo.known_vars
+            for key in self.vars:
+                self.vars[key] = self.vars[key].to(eval(pluto_vars[key][0]))
+            
+            for key in self.derived_vars:
+                self.derived_vars[key] = self.derived_vars[key].to(eval(pluto_vars[key][0]))
+
+            self.time = self.time.to(code_length/code_velocity)
+            self.dt = self.dt.to(code_length/code_velocity)
+        else:
+            for key in self.coord:
+                self.coord[key] *= code_length
+            
+            pluto_vars = PlutoVarsInfo.known_vars
+            for key in self.vars:
+                self.vars[key] *= eval(pluto_vars[key][0])
+            
+            for key in self.derived_vars:
+                self.derived_vars[key] *= eval(pluto_vars[key][0])
+
+            self.time *= code_length/code_velocity
+            self.dt *= code_length/code_velocity
+
+    def in_astro_unit(self):
+        """ convert the units to those commonly used in astro
+        """
+
+        if not isinstance(self.coord['x1'], u.Quantity):    # in case not quantity, assign code_unit first
+            self.in_code_unit()
+
+        for key in self.coord:
+            self.coord[key] = self.coord[key].to(u.kpc)
+        
+        pluto_vars = PlutoVarsInfo.known_vars
+        for key in self.vars:
+            unit = u.Unit(pluto_vars[key][1])
+            if unit == "":
+                self.vars[key] = self.vars[key].cgs
+            else:
+                self.vars[key] = self.vars[key].to(u.Unit(pluto_vars[key][1]))
+        
+        for key in self.derived_vars:
+            if unit == "":
+                self.vars[key] = self.derived_vars[key].cgs
+            else:
+                self.derived_vars[key] = self.derived_vars[key].to(u.Unit(pluto_vars[key][1]))
+        self.time = self.time.to(u.yr)
+        self.dt = self.dt.to(u.yr)
 
 
-
-
-
-
-
-def load(fn):
-    """ load PLUTO simulation output and return a structured PLUTOData class
+def load(fn):  # in construction
+    """ load PLUTO simulation all outputs and return time series data.
     """
     fn = os.path.expanduser(fn)
     if any(wildcard in fn for wildcard in "[]?!*"):
@@ -337,6 +388,8 @@ class Preview(object):
 
         ds = Dataset(w_dir=kwargs.get('wdir', self.wdir), datatype=kwargs.get('datatype', self.datatype))
         ss = ds[ns]
+        if kwargs.get('in_astro_unit'):
+            ss.in_astro_unit()
 
         x1 = ss.coord['x1']
         x2 = ss.coord['x3']
@@ -349,8 +402,12 @@ class Preview(object):
         ax1 = self.fig.add_subplot(111)
         ax1.set_aspect('equal')
 
+        if isinstance(x1, u.Quantity):  # pcolormesh does not support Quantity
+            x1 = x1.value
+            x2 = x2.value
+            value = value.value
         ax1.axis([np.min(x1),np.max(x1),np.min(x2),np.max(x2)])
-        pcm = ax1.pcolormesh(x1.value,x2.value,value.value,vmin=kwargs.get('vmin',np.min(value.value)),vmax=kwargs.get('vmax',np.max(value.value)), cmap=kwargs.get('cmap','jet'))
+        pcm = ax1.pcolormesh(x1,x2,value,vmin=kwargs.get('vmin',np.min(value)),vmax=kwargs.get('vmax',np.max(value)), cmap=kwargs.get('cmap'))
 
         plt.title(kwargs.get('title',f"t = {ss.time:.3e}"),size=kwargs.get('size'))
         # plt.xlabel(kwargs.get('label1',"R(kpc)"),size=kwargs.get('size'))

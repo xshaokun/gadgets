@@ -4,6 +4,7 @@
 
 So far, the package includes the following modules:
 * [fermi.py](fermi): contains the class and functions used to process the data of FERMI, a private hydro simulation code.
+* `pluto.py`: contains the class and functions used to process the data from PLUTO.
 * `streamplot.py`: matplotlib streamplot for uneven grids. [forked from [here](https://github.com/tomflannaghan/matplotlib/blob/streamplot-real-space-integrate/lib/matplotlib/streamplot.py)]
 * [astroeqs.py](astroeqs): provides some frequently-used formulae to calculate astronomical quantities quickly.
 

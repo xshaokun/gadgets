@@ -12,16 +12,13 @@ import os
 import fire
 import numpy as np
 import pandas as pd
-import pyPLUTO as pypl
 import pyPLUTO.pload as pp
 from astropy.visualization import quantity_support
-quantity_support()
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from skpy.utilities.tools import nearest
 from astropy import units as u
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-
 
 
 class PlutoDefConstants(object):
@@ -59,36 +56,57 @@ class PlutoDefConstants(object):
         for key, value in self.__pluto_def_constants.items():
             setattr(self, key, value)
 
-class PlutoVarsInfo(object):
-    # Physical variables
-    # Value name / code_unit / dimension
-    known_vars = {
-        "rho"   :  ("code_density",                    "g/cm**3",         "density"),
-        "vx1"   :  ("code_velocity",                   "km/s",         "speed"),
-        "vx2"   :  ("code_velocity",                   "km/s",         "speed"),
-        "vx3"   :  ("code_velocity",                   "km/s",         "speed"),
-        "prs"   :  ("code_density*code_velocity**2",   "erg/cm**3",    "pressure"),
-        "speed" :  ("code_velocity",                   "km/s",         "spped"),
-        "temp"  :  ("u.K",                             "K",            "temperature"),
-        "mass"  :  ("code_density*code_length**3",     "Msun"          "mass"),
-        "time"  :  ("code_length/code_veloctiy",       "yr",           "time"),
-        "acc"   :  ("code_veloctiy**2/code_length",    "",      "acceleration")
+
+class PlutoFluidInfo(object):
+    known_fields = {
+# Variable name :  (code_unit,                         astro_unit,    dimension     , alias          )
+# ---------------------------------------------------------------------------------------------------
+        "rho"   :  ("code_density",                    "g/cm**3",     "density"     , ["density"     ]),
+        "vx1"   :  ("code_velocity",                   "km/s",        "speed"       , ["velocity-1"  ]),
+        "vx2"   :  ("code_velocity",                   "km/s",        "speed"       , ["velocity-2"  ]),
+        "vx3"   :  ("code_velocity",                   "km/s",        "speed"       , ["velocity-3"  ]),
+        "prs"   :  ("code_density*code_velocity**2",   "erg/cm**3",   "pressure"    , ["pressure"    ]),
+        "speed" :  ("code_velocity",                   "km/s",        "speed"       , ["speed"       ]),
+        "temp"  :  ("u.K",                             "K",           "temperature" , ["temperature" ]), 
+        "mass"  :  ("code_density*code_length**3",     "Msun",        "mass"        , ["mass"        ]),
+        "acc"   :  ("code_veloctiy**2/code_length",    "",            "acceleration", ["acceleration"])
     }
 
-    # def __init__(self, code_unit):
-        # code_density = u.def_unit('code_density', represents=code_unit['code_density'])
-        # code_length = u.def_unit('code_length', represents=code_unit['code_length'])
-        # code_velocity = u.def_unit('code_velocity', represents=code_unit['code_velocity'])
-        # for item in self.__known_vars:
-            # uni = eval(item[1][0])
-            # dim = u.get_physical_type(uni)
-            # setattr(self, item[0], {'unit': uni, 'dimension': dim})
-        # self.known_vars = self.__known_vars[:][0]
+    @classmethod
+    def show(cls):
+        print("Field Name \t Alias")
+        print('-------------------------------')
+        for key, value in cls.known_fields.items():
+            print(f"{key:10s} \t {value[-1]}")
 
+    @classmethod
+    def add_fields(cls, name, code_unit=None, astro_unit=None, dimension=None):
+        list = (code_unit, astro_unit, dimension)
+        cls.known_fields[name] = list
 
 
 class Dataset(object):
-    """ Pluto data work directory
+    """ Pluto data work directory 
+    
+    Args:
+    w_dir (str): path to the directory where data files locate. Default is './'.
+    datatype(str): type of data files. Default is 'vtk'.
+    init_file(str): init file including the parameters for simulation. Default is 'pluto.ini'.
+
+    Attributes:
+    wdir: (str) absolute path to the dirctory.
+    init_file: (str)
+    datatype: (str)
+    filetype: (str)
+    endianess: (str)
+    geometry: (str)
+    ndim: (int)
+    code_unit: (dict)
+    field_list: (list)
+    derived_fields: (list)
+
+    Methods:
+    info():
     """
 
     __slots__=[
@@ -98,9 +116,10 @@ class Dataset(object):
         "filetype",
         "endianess",
         "geometry",
+        "ndim",
         "code_unit",
-        "vars",
-        "derived_vars",
+        "field_list",
+        "derived_fields",
         "__log_file",
         "__ds"
     ]
@@ -117,9 +136,9 @@ class Dataset(object):
             max = int(lastline[0])
             self.filetype = lastline[4]
             self.endianess = lastline[5]
-            self.vars = lastline[6:]
+            self.field_list = lastline[6:]
         self.geometry = 'CARTESIAN'
-        self.derived_vars = {}
+        self.derived_fields = {}
 
         # Three base units and default values in pluto code
         self.code_unit={
@@ -133,6 +152,8 @@ class Dataset(object):
                 for line in df.readlines():
                     if line.startswith('#define  GEOMETRY'):
                         self.geometry = line.split()[-1]
+                    if line.startswith('#define  DIMENSION'):
+                        self.ndim = int(line.split()[-1])
                     if line.startswith('#define  UNIT'):
                         name = line.split()[1]
                         expr = line.split()[-1]
@@ -148,7 +169,7 @@ class Dataset(object):
     def __getitem__(self, index):
         # index: int or time
         ns = self._number_step(index)
-        ds = Snapshot(ns, w_dir=self.wdir, datatype=self.datatype)
+        ds = Snapshot(ns, w_dir=self.wdir, datatype=self.datatype, init_file=self.init_file)
         return ds
 
 
@@ -180,32 +201,59 @@ class Dataset(object):
 
 
 class Snapshot(Dataset):
-    """ 
+    """ Pluto output snapshot data structure
+    
+    Args:
+    Refer to Dataset() class
+
+    Attributes:
+    Include all attributes of Dataset() class, besides:
+    nstep: (int)
+    time: (int/units.Quantity)
+    dt: (float)
+    is_quantity: (bool)
+    index: (dict)
+    coord: (dict)
+    grid: (dict)
+    fields: (dict)
+    
+    Methods:
+    info() :
+    in_code_unit():
+    in_astro_unit():
+    slice2d(field, x1=None, x2=None, x3=None):
+    slice1d(field, x1=None, x2=None, x3=None):
+    to_cart(field):
     """
 
     __slots__= [
         "nstep",
         "time",
         "dt",
-        "grids",
+        "is_quantity",
+        "index",
         "coord",
+        "grid",
+        "fields"
     ]
 
-    def __init__(self, ns, w_dir, datatype):
-        super().__init__(w_dir, datatype)
+    def __init__(self, ns, w_dir, datatype,init_file):
+        super().__init__(w_dir, datatype, init_file)
 
         D = pp.pload(ns, w_dir=self.wdir, datatype=self.datatype)
         self.nstep = D.NStep
         self.time = D.SimTime
         self.dt = D.Dt
+        self.is_quantity = False
 
         grids_info = [
             "n1","n2","n3",                 # number of computational cells
             "n1_tot","n2_tot","n3_tot",     # total cells including ghost cells
         ]
-        self.grids = {}
+        self.index = {}
         for key in grids_info:
-            self.grids[key] = getattr(D, key)
+            self.index[key] = getattr(D, key)
+        # self.ndim -= list(self.index.values()).count(1)  # modify dimension value, in case not include_jdir or not include_kdir
 
         coord_info = [
             'x1','x2','x3',     # cell center coordinate
@@ -216,16 +264,26 @@ class Snapshot(Dataset):
         for key in coord_info:
             self.coord[key] = getattr(D, key)
 
-        vars_info = {}
-        for var in self.vars:
-            vars_info[var] = getattr(D, var).T
-        self.vars = vars_info
+        self.grid = {}  # construct meshgrid
+        self.grid['x1'], self.grid['x2'], self.grid['x3'] = np.meshgrid(self.coord['x1'], self.coord['x2'], self.coord['x3'])
+        self.grid['dx1'], self.grid['dx2'], self.grid['dx3'] = np.meshgrid(self.coord['dx1'], self.coord['dx2'], self.coord['dx3'])
+        self.grid['x1r'], self.grid['x2r'], self.grid['x3r'] = np.meshgrid(self.coord['x1r'], self.coord['x2r'], self.coord['x3r'])
+        if self.ndim !=3:
+            for key in self.grid:
+                self.grid[key] = self.grid[key].squeeze()
 
-        if 'definitions.h' in os.listdir(self.wdir):
-            self.in_code_unit()
+        vars_info = {}
+        for var in self.field_list:
+            vars_info[var] = getattr(D, var).T
+        self.fields = vars_info
+
+        # if 'definitions.h' in os.listdir(self.wdir):
+            # self.in_code_unit()
+
 
     def __getitem__(self, key):
-        return self.__vars_value[key]
+        return self.__fields_value[key]
+
 
     def info(self):
         for attr in self.__slots__:
@@ -233,85 +291,240 @@ class Snapshot(Dataset):
             if not isinstance(value, dict):
                 print(f'{attr:15}:  {value}')
 
-    def add_vars(self, name, value, unit=None, dimensions=None): # in construction
-        defined_vars = PlutoVarsInfo.known_vars
-        if name in defined_vars:
-            unit = eval(defined_vars[name][0])
-            if dimensions:
-                if dimensions not in u.get_physical_type(unit):
-                    raise ValueError(f'The given dimension {dimensions} is not compatible with the unit')
-            else:
-                print('Warning: the option [dimensions] is empty, the unit was not checked, and it could be wrong!')
-        elif unit==None and isinstance(value, u.quantity):
-            raise ValueError(f'The variable {name} cannot be found in the defined list, the unit is required.')
-        else:
-            pass
 
     def in_code_unit(self):
-        """ Assign code units
-        """
+        """ Assign code units """
+
         code_density = u.def_unit('code_density', represents=self.code_unit['code_density'])
         code_length = u.def_unit('code_length', represents=self.code_unit['code_length'])
         code_velocity = u.def_unit('code_velocity', represents=self.code_unit['code_velocity'])
         # u.add_enabled_units([code_density, code_length, code_velocity])
 
-        if isinstance(self.coord['x1'], u.Quantity):    # in case units are already assigned
+        if self.is_quantity:    # in case units are already assigned
             for key in self.coord:
-                self.coord[key] = self.coord[key].to(code_length)
-            
-            pluto_vars = PlutoVarsInfo.known_vars
-            for key in self.vars:
-                self.vars[key] = self.vars[key].to(eval(pluto_vars[key][0]))
-            
-            for key in self.derived_vars:
-                self.derived_vars[key] = self.derived_vars[key].to(eval(pluto_vars[key][0]))
+                if self.geometry == "CARTESIAN":
+                    self.coord[key] = self.coord[key].to(code_length)
+                    self.grid[key] = self.grid[key].to(code_length)
+                elif self.geometry == "SPHERICAL":
+                    if '1' in key:
+                        self.coord[key] = self.coord[key].to(code_length)
+                        self.grid[key] = self.grid[key].to(code_length)
+                    else:
+                        self.coord[key] = self.coord[key].to(u.rad)
+                        self.grid[key] = self.grid[key].to(u.rad)
+                elif self.geometry == "POLAR":
+                    if '2' in key:
+                        self.coord[key] = self.coord[key].to(u.rad)
+                        self.grid[key] = self.grid[key].to(u.rad)
+                    else:
+                        self.coord[key] = self.coord[key].to(code_length)
+                        self.grid[key] = self.grid[key].to(code_length)
+
+            pluto_fields = PlutoFluidInfo.known_fields
+            for key in self.field_list:
+                self.fields[key] = self.fields[key].to(eval(pluto_fields[key][0]))
 
             self.time = self.time.to(code_length/code_velocity)
             self.dt = self.dt.to(code_length/code_velocity)
         else:
             for key in self.coord:
-                self.coord[key] *= code_length
-            
-            pluto_vars = PlutoVarsInfo.known_vars
-            for key in self.vars:
-                self.vars[key] *= eval(pluto_vars[key][0])
-            
-            for key in self.derived_vars:
-                self.derived_vars[key] *= eval(pluto_vars[key][0])
+                if self.geometry == "CARTESIAN":
+                    self.coord[key] *= code_length
+                    self.grid[key] *= code_length
+                elif self.geometry == "SPHERICAL":
+                    if '1' in key:
+                        self.coord[key] *= code_length
+                        self.grid[key] *= code_length
+                    else:
+                        self.coord[key] *= u.rad
+                        self.grid[key] *= u.rad
+                elif self.geometry == "POLAR":
+                    if '2' in key:
+                        self.coord[key] *= u.rad
+                        self.grid[key] *= u.rad
+                    else:
+                        self.coord[key] *= code_length
+                        self.grid[key] *= code_length
+
+            pluto_fields = PlutoFluidInfo.known_fields
+            for key in self.field_list:
+                self.fields[key] *= eval(pluto_fields[key][0])
 
             self.time *= code_length/code_velocity
             self.dt *= code_length/code_velocity
+
+        self.is_quantity = True 
+
 
     def in_astro_unit(self):
         """ convert the units to those commonly used in astro
         """
 
-        if not isinstance(self.coord['x1'], u.Quantity):    # in case not quantity, assign code_unit first
+        if not self.is_quantity:    # in case not quantity, assign code_unit first
             self.in_code_unit()
 
         for key in self.coord:
-            self.coord[key] = self.coord[key].to(u.kpc)
+            if self.geometry == "CARTESIAN":
+                self.coord[key] = self.coord[key].to(u.kpc)
+            elif self.geometry == "SPHERICAL":
+                if '1' in key:
+                    self.coord[key] = self.coord[key].to(u.kpc)
+                    self.grid[key] = self.grid[key].to(u.kpc)
+                else:
+                    self.coord[key] = self.coord[key].to(u.deg)
+                    self.grid[key] = self.grid[key].to(u.deg)
+            elif self.geometry == "POLAR":
+                if '2' in key:
+                    self.coord[key] = self.coord[key].to(u.deg)
+                    self.grid[key] = self.grid[key].to(u.deg)
+                else:
+                    self.coord[key] = self.coord[key].to(u.kpc)
+                    self.grid[key] = self.grid[key].to(u.kpc)
         
-        pluto_vars = PlutoVarsInfo.known_vars
-        for key in self.vars:
-            unit = u.Unit(pluto_vars[key][1])
+        pluto_fields = PlutoFluidInfo.known_fields
+        for key in self.field_list:
+            unit = u.Unit(pluto_fields[key][1])
             if unit == "":
-                self.vars[key] = self.vars[key].cgs
+                self.fields[key] = self.fields[key].cgs
             else:
-                self.vars[key] = self.vars[key].to(u.Unit(pluto_vars[key][1]))
+                self.fields[key] = self.fields[key].to(u.Unit(pluto_fields[key][1]))
         
-        for key in self.derived_vars:
-            if unit == "":
-                self.vars[key] = self.derived_vars[key].cgs
-            else:
-                self.derived_vars[key] = self.derived_vars[key].to(u.Unit(pluto_vars[key][1]))
         self.time = self.time.to(u.yr)
         self.dt = self.dt.to(u.yr)
 
 
+    def slice2d(self, field, x1=None, x2=None, x3=None):
+        """ Slice 3-D array and return 2-D array """
+        offset = [x1,x2,x3]
+        i = 0
+        for coord in offset:
+            if coord is not None:  # find the direction
+                dir = 'x'+str(i+1)
+                if self.is_quantity:
+                    x = self.coord[dir].value
+                else:
+                    x = self.coord[dir]
+                offset[i] = nearest(x, coord)  # convert coord to index
+                break
+            i+=1
+        index = str(offset).replace('None',':')
+        arr = eval('self.fields[field]' + index)
+        return arr
+
+
+    def slice1d(self, field, x1=None, x2=None, x3=None):
+        """ Slice 3-D array and return 1-D array """
+        if self.ndim == 3:
+            offset = [x1,x2,x3]
+        else:
+            offset = [x1,x2]
+            
+        i = 0
+        for coord in offset:
+            dir = 'x'+str(i+1)
+            if self.is_quantity:
+                x = self.coord[dir].value
+            else:
+                x = self.coord[dir]
+            
+            if coord is not None:
+                offset[i] = nearest(x, coord)
+            else:
+                offset[i] = None
+            i+=1
+        index = str(offset[::-1]).replace('None',':')
+        arr = eval('self.fields[field]'+index)
+        return arr
+
+
+    @staticmethod
+    def _from_sph_coord(r, theta, phi):
+        """ from spherical coordinate to cartesian coordinate """
+        x = r * np.sin(theta) * np.cos(phi)
+        y = r * np.sin(theta) * np.cos(phi)
+        z = r * np.cos(theta)
+        return x, y, z
+
+    @staticmethod
+    def _from_cyl_coord(R, phi, z):
+        """ from cylindrical coordinate to cartesian coordinate """
+        x = R * np.cos(phi)
+        y = R * np.sin(phi)
+        z = z
+        return x, y, z
+
+    @staticmethod
+    def _from_sph_vect(r, theta, phi, v_r, v_th, v_phi):
+        """ from vectors in spherical coordinate to those in cartesian coordinate """
+        v_x = v_r * np.sin(theta) * np.cos(phi) + v_th * np.cos(theta) * np.cos(phi) - v_phi * np.sin(phi)
+        v_y = v_r * np.sin(theta) * np.sin(phi) + v_th * np.cos(theta) * np.sin(phi) + v_phi * np.cos(phi)
+        v_z = v_r * np.cos(theta) - v_th * np.sin(theta)
+        return v_x, v_y, v_z
+
+    @staticmethod
+    def _from_cyl_vect(R, phi, z, v_R, v_phi, v_z):
+        """ from vectors in cylindrical coordinate to those in cartesian coordinate """
+        v_x = v_R * np.cos(phi) - v_phi * np.sin(phi)
+        v_y = v_R * np.sin(phi) + v_phi * np.cos(phi)
+        v_z = v_z
+        return v_x, v_y, v_z
+
+
+    def to_cart(self, field):
+        x = []
+        v = []
+        for i in range(1,4):
+            if self.index['n'+str(i)] == 1:
+                xx = np.zeros_like(self.grid['x'+str(i)])
+                x.append(xx)
+            else:
+                x.append(self.grid['x'+str(i)])
+            v.append(self.fields['vx'+str(i)])
+
+        print(x[2])
+        if self.geometry == "SPHERICAL":
+            if field=='grid':
+                x1, x2, x3 = self._from_sph_coord(x[0],x[1],x[2])
+            elif field=='velocity':
+                x1, x2, x3 = self._from_sph_vect(x[0],x[1],x[2],v[0],v[1],v[2])
+        elif self.geometry == "POLAR":
+            if field=='grid':
+                x1, x2, x3 = self._from_cyl_coord(x[0],x[1],x[2])
+            elif field=='velocity':
+                x1, x2, x3 = self._from_cyl_vect(x[0],x[1],x[2],v[0],v[1],v[2])
+        else:
+            raise KeyError("Only support geometry of [SPHERICAL] and [POLAR].")
+
+        return x1, x2, x3
+
+
+def to_cart(data):
+    ds = data
+    ds.grid['x1'],  ds.grid['x2'], ds.grid['x3'] = data.to_cart('grid')
+    ds.fields['vx1'],  ds.fields['vx2'], ds.fields['vx3'] = data.to_cart('velocity')
+
+    return ds
+
+
+
+def slice2d(data, x1=None, x2=None, x3=None):
+    """ Slice 3-D array and return 2-D array"""
+    if not isinstance(data, Snapshot): raise TypeError(f"The input data is a {type(data)}, it should be Snapshot class!")
+    
+    for var in data.field_list:
+        data.fields[var] = data.slice2d(var, x1=x1, x2=x3, x3=x3)
+
+
+def slice1d(data, x1=None, x2=None, x3=None):
+    """ Slice 3-D array and return 1-D array """
+    if not isinstance(data, Snapshot): raise TypeError("The input data should be Snapshot class!")
+
+    for var in data.field_list:
+        data.fields[var] = data.slice1d(var, x1=x1, x2=x3, x3=x3)
+
+
 def load(fn):  # in construction
-    """ load PLUTO simulation all outputs and return time series data.
-    """
+    """ load PLUTO simulation all outputs and return time series data """
     fn = os.path.expanduser(fn)
     if any(wildcard in fn for wildcard in "[]?!*"):
        return 0
@@ -325,8 +538,7 @@ def load(fn):  # in construction
 class Preview(object):
     """ Class for previewing data results.
 
-    Parameters:
-    -----------
+    Args:
     figsize : tuple. Size of the figure presented. Default: (10,8)
     loc : str. Path of the data located. Default: './'
     dest : str. Destination for saving the figure. None means not saving but prom
@@ -359,85 +571,91 @@ class Preview(object):
         plt.savefig(path+name+f'-{model}.jpg',bbox_inches='tight', pad_inches=0.02, dpi=kwargs.get('dpi',300))
 
 
-    def display(self, ns, var, log=True, **kwargs):
+    def display(self, ns, field, x1=None, x2=None, x3=None, log=True, **kwargs):
         """ Display a 2D data using the matplotlib's pcolormesh
 
-        Parameters:
-        -----------
+        Args:
         ns: number step of data filens
-        var: variable that needs to be displayed
+        field: variable that needs to be displayed
 
         **kwargs:
-        ---------
         wdir:     path to the directory which has the data files
         datatype:  Datatype (default is set to read .dbl data files)
         x1range:   List with min and max value of x1 coordinates for zooming
         x2range:   List with min and max value of x2 coordinates for zooming
         x3range:   List with min and max value of x3 coordinates for zooming
 
-        vmin:   The minimum value of the 2D array (Default : min(var))
-        vmax:   The maximum value of the 2D array (Default : max(var))
+        vmin:   The minimum value of the 2D array (Default : min(field))
+        vmax:   The maximum value of the 2D array (Default : max(field))
         title:  Sets the title of the image.
         label1: Sets the X Label (Default: 'XLabel')
         label2: Sets the Y Label (Default: 'YLabel')
         cmap:  color scheme of the colorbar (Default : jet)
         size:  fontsize
-
         """
-        # quantity_support()
 
         ds = Dataset(w_dir=kwargs.get('wdir', self.wdir), datatype=kwargs.get('datatype', self.datatype))
         ss = ds[ns]
+        if ss.geometry != "CARTESIAN":
+            ss = to_cart(ss)
+
         if kwargs.get('in_astro_unit'):
             ss.in_astro_unit()
 
-        x1 = ss.coord['x1']
-        x2 = ss.coord['x3']
-        y = ss.coord['x2']
-        yaxis = nearest(y, 0.0)
-        value = ss.vars[var]
-        value = value[:,yaxis,:]
+        offset = [x1,x2,x3]
+        label = ['x1','x2','x3']
+        
+        if ss.ndim==3:
+            arr = ss.slice2d(field, x1=x1, x2=x2, x3=x3)
+            for i in range(3):    # find the dirction
+                if offset[i] is not None:
+                    dir = 'x'+str(i+1)
+                    label.remove(dir)
+                    break
+            x1 = ss.coord[label[0]]
+            x2 = ss.coord[label[1]]
+        elif ss.ndim==2:
+            arr = ss.fields[field]
+            x1 = ss.grid['x1']
+            x2 = ss.grid['x3']
 
-        x1, x2 = np.meshgrid(x1,x2)
         ax1 = self.fig.add_subplot(111)
         ax1.set_aspect('equal')
-
-        if isinstance(x1, u.Quantity):  # pcolormesh does not support Quantity
+        if ss.is_quantity:  # pcolormesh does not support Quantity
             x1 = x1.value
             x2 = x2.value
-            value = value.value
-        ax1.axis([np.min(x1),np.max(x1),np.min(x2),np.max(x2)])
-        pcm = ax1.pcolormesh(x1,x2,value,vmin=kwargs.get('vmin',np.min(value)),vmax=kwargs.get('vmax',np.max(value)), cmap=kwargs.get('cmap'))
-
+            arr = arr.value
+        ax1.axis([np.amin(x1),np.amax(x1),np.amin(x2),np.amax(x2)])
+        if log:
+            pcm = ax1.pcolormesh(x1,x2,arr,vmin=kwargs.get('vmin'),vmax=kwargs.get('vmax'), cmap=kwargs.get('cmap'), shading='auto', norm=mpl.colors.LogNorm())
+        else:
+            pcm = ax1.pcolormesh(x1,x2,arr,vmin=kwargs.get('vmin'),vmax=kwargs.get('vmax'), cmap=kwargs.get('cmap'), shading='auto')
+ 
         plt.title(kwargs.get('title',f"t = {ss.time:.3e}"),size=kwargs.get('size'))
-        # plt.xlabel(kwargs.get('label1',"R(kpc)"),size=kwargs.get('size'))
-        # plt.ylabel(kwargs.get('label2',"z(kpc)"),size=kwargs.get('size'))
-
+ 
         # Add a new axes beside the plot to present colorbar
         divider = make_axes_locatable(ax1)
         cax = divider.append_axes("right", size="5%", pad=0.0)
         cb = plt.colorbar(pcm, cax=cax,orientation='vertical')
-        defined_vars = PlutoVarsInfo.known_vars
+        defined_fields = PlutoFluidInfo.known_fields
         if log:
-            cb.ax.set_ylabel(r'$\log\;$'+defined_vars.get(var)[0])
+            cb.ax.set_ylabel(r'$\log\;$'+defined_fields.get(field)[-1][0])
         else:
-            cb.ax.set_ylabel(defined_vars.get(var)[0])
+            cb.ax.set_ylabel(defined_fields.get(field)[-1][0])
 
         return self
 
 
-    def line(self, ns, var, x1=None, x2=None, x3=None, **kwargs):
+    def line(self, ns, field, x1=None, x2=None, x3=None, **kwargs):
         """ Show 1D profile
 
-        Parameters:
-        -----------
+        Args:
         ns:   Step Number of the data file
-        var:  variable name that needs to be displayed
+        field:  variable name that needs to be displayed
         dir:  direction of the data (only along axis)
         offset:  distance from center
 
         **kwargs:
-        ---------
         wdir:     path to the directory which has the data files
         datatype:  Datatype (default is set to read .dbl data files)
         x1range:   List with min and max value of x1 coordinates for zooming
@@ -450,18 +668,13 @@ class Preview(object):
         indx = [x1,x2,x3]
         label = ['x1','x2','x3']
         for i in range(3):
-            indx[i] = nearest(ss.coord[label[i]], indx[i])
             if indx[i] == None:
-                x = ss.coord[label[i]]
-        indx = str(indx[::-1]).replace('None',':')
-        value = eval('ss.vars[var]'+indx)
+                dir = label[i]
+                x = ss.coord[dir]
+                break
 
-        # slice the data
-        # idx = nearest(ss.coord[of[dir]], offset)
-        # value = ss.vars[var][:,0,:]
-        # value = value[:,idx] if dir=='x1' else value[idx,:]
+        value = ss.slice1d(field,x1=x1,x2=x2,x3=x3)
 
-# {of[dir]}={offset}, 
         plt.plot(x, value, label=f"t={ss.time:.3e}")
 
         plt.title(kwargs.get('title',"Title"),size=kwargs.get('size'))
@@ -476,7 +689,7 @@ class Preview(object):
         return self
 
 
-    def hist(self, *var, op=None, **kwargs):
+    def hist(self, *var, op=None, **kwargs):  # in construction
         """ Preview temperal evolution stored in hist.log file
 
         """
@@ -504,25 +717,6 @@ class Preview(object):
         if kwargs.get('ylog'): plt.yscale('log')
 
         return self
-
-
-    def NumberStep(self, ns):
-        """ find number step of data file
-
-        ns -- should be a integer in default,
-                but if it is a negative integer, return the last number step
-                or if it is a float, it is assumed to be time, and return the nearst number step
-        """
-
-        if type(ns) is int:
-            if ns < 0:
-                return self.log.index[-1]
-            else:
-                return ns
-        elif type(ns) is float:         #  given a specific [time], find [ns] corresponding nearst existed data [time].
-            return nearest(self.log['time'],ns)
-        else:
-            raise(TypeError(f"ns({ns}) should be int or float, now it is {type(ns)}."))
 
 
 if __name__ == "__main__":

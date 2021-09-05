@@ -20,8 +20,7 @@ def nearest(arr,target):
         arr: array for searching
         target: target number
     """
-    if target == None:
-        index = None
-    else:
-        index = np.abs(arr-target).argmin()
+
+    index = np.abs(arr-target).argmin()
+    
     return index

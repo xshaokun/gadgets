@@ -632,11 +632,11 @@ class Preview(object):
     return plt.show()
 
 
-  def save(self, name, path='./', **kwargs):
+  def save(self, name=None, path='./', **kwargs):
     ''' save figure
 
     Args:
-      name (str): filename prefix
+      name (str): specifiy filename. If it is None, the filename will be "field+index-model.jpg". (optional) Default is None
       path (str): path to save figure. (optional) Default is './'
 
     Returns:
@@ -644,7 +644,10 @@ class Preview(object):
     '''
 
     model = self.wdir.split('/')[-2]
-    plt.savefig(path+name+f'-{model}.jpg',bbox_inches='tight', pad_inches=0.02, dpi=kwargs.get('dpi',300))
+    if name is None:
+      plt.savefig(path+f'{self.field}{self.index}-{model}.jpg',bbox_inches='tight', pad_inches=0.02, dpi=kwargs.get('dpi',300))
+    else:
+      plt.savefig(path+name+'.jpg',bbox_inches='tight', pad_inches=0.02, dpi=kwargs.get('dpi',300))
 
 
   def display(self, ns, field, x1=None, x2=None, x3=None, log=True, **kwargs):
@@ -671,6 +674,9 @@ class Preview(object):
 
     ds = Dataset(w_dir=kwargs.get('wdir', self.wdir), datatype=kwargs.get('datatype', self.datatype))
     ss = ds[ns]
+    self.field = field
+    self.index = ss.nstep
+
     if ss.geometry != 'CARTESIAN':
       ss = to_cart(ss)
 
@@ -744,6 +750,8 @@ class Preview(object):
 
     ds = Dataset(w_dir=kwargs.get('wdir', self.wdir), datatype=kwargs.get('datatype', self.datatype))
     ss = ds[ns]
+    self.field = field
+    self.index = ss.nstep
     indx = [x1,x2,x3]
     label = ['x1','x2','x3']
     for i in range(3):

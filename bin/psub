@@ -4,7 +4,7 @@ echo "=============================================="
 echo "==        PLUTO LSF Job Submission          =="
 echo "=============================================="
 
-while getopts 'hj::' OPTNAME; do
+while getopts 'hnj::' OPTNAME; do
     case "$OPTNAME" in
     h)
         echo "Description:"
@@ -15,15 +15,21 @@ while getopts 'hj::' OPTNAME; do
         echo ""
         echo "Usage: psub [-h] [-j job.s] FILE.ini"
         echo "-h,    This help text"
+        echo "-n,    Not submit job script"
         echo "-j,    Specify filename of job script. Default: job.s"
         exit 0
+        ;;
+    n)
+        no_submit=true
+        shift
         ;;
     j)
         jobscript=$OPTARG
         echo "> Log:    Job Script: $jobscript"
+        shift 2
         ;;
     ?)
-        echo "usage: $(basename $0) [-h] [-j jobscript] file.ini" >&2
+        echo "usage: $(basename $0) [-h] [-n] [-j jobscript] file.ini" >&2
         exit 1
         ;;
     esac
@@ -32,12 +38,19 @@ done
 # Set default filename of job script to job.s
 if [ -z $jobscript ]; then
     jobscript=job.s
-    filepath=$1
-else
-    filepath=$3
 fi
 
-ln -sf $filepath pluto.ini && echo "> Action: pluto.ini -> $filepath"
+filepath=`readlink -f $1`
+if [ -f pluto.ini ]; then
+    if [ -L pluto.ini ]; then
+        rm pluto.ini
+        ln -s $filepath pluto.ini && echo "> Action: pluto.ini -> $filepath"
+    else
+        echo "> Log:    pluto.ini already exits but is not a symbolic link, skip overriding it"
+    fi
+else
+    ln -s $filepath pluto.ini && echo "> Action: pluto.ini -> $filepath"
+fi
 
 # Task name is the init filename without extension
 filename=${filepath##*/};
@@ -65,7 +78,7 @@ fi
 # output filename
 # error filename
 if [ -e $jobscript ]; then
-    sed -i ".bak" -E \
+    sed -i.bak -r -e \
     "\
     s|(^#BSUB[ ]+-J[ ]+)[^ ]+([ ]*.*)|\1$taskname\2|;\
     s|(^#BSUB[ ]+-o[ ]+)[^ ]+([ ]*.*)|\1$output_dir$taskname.out\2|;\
@@ -77,4 +90,8 @@ else
 fi
 
 # submit job script
-bsub < $jobscript
+if [ -z $no_submit ]; then
+    bsub < $jobscript
+else
+    echo "> Log:    Not submit job script"
+fi

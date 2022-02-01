@@ -8,27 +8,5 @@ So far, the package includes the following modules:
 * `streamplot.py`: matplotlib streamplot for uneven grids. [forked from [here](https://github.com/tomflannaghan/matplotlib/blob/streamplot-real-space-integrate/lib/matplotlib/streamplot.py)]
 * [astroeqs.py](astroeqs): provides some frequently-used formulae to calculate astronomical quantities quickly.
 
-## Installation
-First of all, download this module.
-
-In Python, a third-party module can be installed temporarily, or permanently. 
-
-For temporarily using a module, you should implement the following code at the beginning of your script:
-
-    import sys
-    sys.path.append(r"path_to_your_module")
-    
-Then the path would be removed every time after your script running.
-
-For install a module permanently, it is better to use a package manager, or `$PYTHONPATH`.
-
-Just like `$PATH`, open `.bashrc` file or `.zshrc` file (if you use zsh shell), and include the following command:
-
-    export PYTHONPATH=/the/path/to/skpy:$PYTHONPATH
-    
-Finally, `source .bashrc` to reload shell configuration.
-
-That's all : )
-
 ## Contact
 If you have any questions, please feel free to ask me. My name is Shaokun Xie. The contact details are not listed here. Please go to find the right approach in somewhere and contact me : p

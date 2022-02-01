@@ -23,7 +23,7 @@ while getopts 'hj::' OPTNAME; do
         echo "> Log:    Job Script: $jobscript"
         ;;
     ?)
-        echo "usage: $(basename $0) [-j jobscript] file.ini" >&2
+        echo "usage: $(basename $0) [-h] [-j jobscript] file.ini" >&2
         exit 1
         ;;
     esac
@@ -44,24 +44,8 @@ filename=${filepath##*/};
 taskname=${filename%.ini}
 echo "> Action: Modify $jobscript with task name -> $taskname"
 
-# Replace some fields in job script with task name, the fields include
-# job name
-# output filename
-# error filename
-if [ -e $jobscript ]; then
-    sed -i ".bak" -E \
-    "\
-    s/(^#BSUB[ ]+-J[ ]+)[^ ]+([ ]*.*)/\1$taskname\2/g;\
-    s/(^#BSUB[ ]+-o[ ]+)[^ ]+([ ]*.*)/\1$taskname.out\2/g;\
-    s/(^#BSUB[ ]+-e[ ]+)[^ ]+([ ]*.*)/\1$taskname.err\2/g;\
-    " $jobscript
-else
-    echo "X Error:  $jobscript does not exist"
-    exit 1
-fi
-
 # Parsing and create output directory
-awk '{if ($1 ~/output_dir/) output_dir=$2}' $filepath
+output_dir=`awk '{if ($1 == "output_dir") print $2}' $filepath`/
 if [ $output_dir ]; then
     echo "> Log:    Parsing output directory -> $output_dir"
     if [ -d $output_dir ]; then
@@ -74,6 +58,22 @@ if [ $output_dir ]; then
     fi
 else
     echo "> Log:    No specified output directory"
+fi
+
+# Replace some fields in job script with task name, the fields include
+# job name
+# output filename
+# error filename
+if [ -e $jobscript ]; then
+    sed -i ".bak" -E \
+    "\
+    s|(^#BSUB[ ]+-J[ ]+)[^ ]+([ ]*.*)|\1$taskname\2|;\
+    s|(^#BSUB[ ]+-o[ ]+)[^ ]+([ ]*.*)|\1$output_dir$taskname.out\2|;\
+    s|(^#BSUB[ ]+-e[ ]+)[^ ]+([ ]*.*)|\1$output_dir$taskname.err\2|;\
+    " $jobscript
+else
+    echo "X Error:  $jobscript does not exist"
+    exit 1
 fi
 
 # submit job script

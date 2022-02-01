@@ -2,4 +2,4 @@
 
 Executable scripts.
 
-* `psub`: (shell) Quick submit PLUTO code to LSF job system 
+* `psub`: (shell) Quickly submit PLUTO code to LSF job system 

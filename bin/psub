@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+ 
+echo "=============================================="
+echo "==        PLUTO LSF Job Submission          =="
+echo "=============================================="
+
+while getopts 'hj::' OPTNAME; do
+    case "$OPTNAME" in
+    h)
+        echo "Description:"
+        echo "- create or override the hard link pluto.ini to given Pluto parameter file"
+        echo "- modify job script with task name while the original file is backuped with extention .bak"
+        echo "- parse and create the corresponding output dirctory"
+        echo "- submit job script"
+        echo ""
+        echo "Usage: psub [-h] [-j job.s] FILE.ini"
+        echo "-h,    This help text"
+        echo "-j,    Specify filename of job script. Default: job.s"
+        exit 0
+        ;;
+    j)
+        jobscript=$OPTARG
+        echo "> Log:    Job Script: $jobscript"
+        ;;
+    ?)
+        echo "usage: $(basename $0) [-j jobscript] file.ini" >&2
+        exit 1
+        ;;
+    esac
+done
+
+# Set default filename of job script to job.s
+if [ -z $jobscript ]; then
+    jobscript=job.s
+    filepath=$1
+else
+    filepath=$3
+fi
+
+ln -sf $filepath pluto.ini && echo "> Action: pluto.ini -> $filepath"
+
+# Task name is the init filename without extension
+filename=${filepath##*/};
+taskname=${filename%.ini}
+echo "> Action: Modify $jobscript with task name -> $taskname"
+
+# Replace some fields in job script with task name, the fields include
+# job name
+# output filename
+# error filename
+if [ -e $jobscript ]; then
+    sed -i ".bak" -E \
+    "\
+    s/(^#BSUB[ ]+-J[ ]+)[^ ]+([ ]*.*)/\1$taskname\2/g;\
+    s/(^#BSUB[ ]+-o[ ]+)[^ ]+([ ]*.*)/\1$taskname.out\2/g;\
+    s/(^#BSUB[ ]+-e[ ]+)[^ ]+([ ]*.*)/\1$taskname.err\2/g;\
+    " $jobscript
+else
+    echo "X Error:  $jobscript does not exist"
+    exit 1
+fi
+
+# Parsing and create output directory
+awk '{if ($1 ~/output_dir/) output_dir=$2}' $filepath
+if [ $output_dir ]; then
+    echo "> Log:    Parsing output directory -> $output_dir"
+    if [ -d $output_dir ]; then
+        echo "> Log:    Output directory $output_dir already exits"
+    elif [ -f $output_dir ]; then
+        echo "X Error:  $output_dir already exits but is not a directory."
+        exit 1
+    else
+        echo "> Action: Creating output directory -> $output_dir"
+    fi
+else
+    echo "> Log:    No specified output directory"
+fi
+
+# submit job script
+bsub < $jobscript

@@ -56,7 +56,8 @@ if [ ! -f $filepath ]; then
 fi
 
 # 1. Parsing and create output directory
-output_dir=$(readlink -f $(awk '{if ($1 == "output_dir") print $2}' $filepath))
+output_dir=$(awk '{if ($1 == "output_dir") print $2}' $filepath)
+output_dir=$(readlink -f $(dirname $filepath)/$output_dir)
 if [ $output_dir ]; then
     echo -e "> Log:    Parsed output directory: \t\t[ $output_dir ]"
     if [ -d $output_dir ]; then

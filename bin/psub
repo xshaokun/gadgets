@@ -133,8 +133,10 @@ fi
 
 # 6. submit job script
 if [ -z $no_submit ]; then
-    bsub < $output_dir/$jobscript_name &&
+    cd $output_dir
+    bsub < $jobscript_name &&
     echo "> Done (6/$steps): Submit job script"
+    cd -
 else
     echo "> Log:    Not submit job script"
 fi

@@ -22,7 +22,7 @@ while getopts 'hnxj:s:' OPTNAME; do
         echo "-n,    Not submit job script"
         echo "-x,    Not change executable file pluto"
         echo "-j,    Specify filename of job script. Default: job.s"
-        echo "-s,    Specify the directory of source code. Default: \$filepath/../code/"
+        echo "-s,    Specify the directory of source code. Default: \${filepath%/runs*}/code/code/"
         exit 0
         ;;
     n)
@@ -56,7 +56,7 @@ if [ ! -f $filepath ]; then
 fi
 
 # 1. Parsing and create output directory
-output_dir=$(readlink -f $(awk '{if ($1 == "output_dir") print $2}' $filepath))/
+output_dir=$(readlink -f $(awk '{if ($1 == "output_dir") print $2}' $filepath))
 if [ $output_dir ]; then
     echo -e "> Log:    Parsed output directory: \t\t[ $output_dir ]"
     if [ -d $output_dir ]; then
@@ -73,12 +73,13 @@ fi
 echo -e "> Done (1/$steps): Create output directory: \t[ $output_dir ]"
 
 # 2. Create or override the soft link pluto.ini
-inifile=${output_dir}pluto.ini
+inifile=${output_dir}/pluto.ini
 if [ -f $inifile ]; then
     # Override
     if [ -L $inifile ]; then
         rm $inifile
-        ln -s $filepath $inifile && echo -e "> Done (2/$steps): Link pluto.ini: \t[ $inifile ] -> [ $filepath ]"
+        rel_filepath=$(realpath --relative-to=$output_dir $filepath)
+        ln -s $rel_filepath $inifile && echo -e "> Done (2/$steps): Link pluto.ini: \t[ $inifile ] -> [ $rel_filepath ]"
     else
         echo "> Log:    [ $inifile ] already exits but is not a symbolic link, so just use it" &&
         echo -e "> Done (2/$steps): Use \t[ $inifile ] itself"
@@ -91,18 +92,18 @@ fi
 
 # 3. Copy definitions.h to the output directory
 if [ -z $src ]; then
-    src=$(readlink -f $(dirname $filepath})/../code)/
+    src=${filepath%/runs*}/code
 fi
 if [ ! -d $src ]; then
     echo "X Error:  Directory of source code does not exist: [ $src ]"
     exit 1
 fi
-cp ${src}definitions.h $output_dir &&
-echo -e "> Done (3/$steps): Copy definitions.h: \t[ ${src}definitions.h ] -> [ ${output_dir}definitions.h ]"
+cp ${src}/definitions.h $output_dir &&
+echo -e "> Done (3/$steps): Copy definitions.h: \t[ ${src}/definitions.h ] -> [ ${output_dir}/definitions.h ]"
 # 4. Copy pluto to the output directory
 if [ -z $no_pluto ]; then
-    cp ${src}pluto $output_dir &&
-    echo -e "> Done (4/$steps): Copy pluto: \t[ ${src}pluto ] -> [ ${output_dir}pluto ]"
+    cp ${src}/pluto $output_dir &&
+    echo -e "> Done (4/$steps): Copy pluto: \t[ ${src}/pluto ] -> [ ${output_dir}/pluto ]"
 else
     echo "> Done (4/$steps): Do not change pluto"
 fi
@@ -114,8 +115,7 @@ fi
 jobscript_name=${jobscript##/*/}
 
 # Task name is the init filename without extension
-filename=$(basename $filepath);
-taskname=${filename%.ini}
+taskname=$(basename $filepath .ini);
 # 5. Replace some fields in job script with task name, the fields include
 # job name
 # output filename
@@ -124,20 +124,19 @@ if [ -e $jobscript ]; then
     sed -r -e \
     "\
     s|(^#BSUB[ ]+-J[ ]+)[^ ]+([ ]*.*)$|\1$taskname\2|;\
-    s|(^#BSUB[ ]+-o[ ]+)[^ ]+([ ]*.*)$|\1$output_dir%J.out\2|;\
-    s|(^#BSUB[ ]+-e[ ]+)[^ ]+([ ]*.*)$|\1$output_dir%J.err\2|;\
-    s|(^.*[ ]+)[^ ]+pluto|\1${output_dir}pluto -i $inifile|;\
-    " $jobscript > $output_dir$jobscript_name &&
-    echo -e "> Done (5/$steps): Create/Override: \t[ $output_dir$jobscript_name ] according to the task name [ $taskname ]"
+    " $jobscript > $output_dir/$jobscript_name &&
+    echo -e "> Done (5/$steps): Create/Override: \t[ $output_dir/$jobscript_name ] according to the task name [ $taskname ]"
 else
-    echo "X Error:  [ $jobscript ] does not exist !"
+    echo "X Error:  Tempelate job script [ $jobscript ] does not exist !"
     exit 1
 fi
 
 # 6. submit job script
 if [ -z $no_submit ]; then
-    bsub < $output_dir$jobscript_name &&
+    cd $output_dir
+    bsub < $jobscript_name &&
     echo "> Done (6/$steps): Submit job script"
+    cd -
 else
     echo "> Log:    Not submit job script"
 fi

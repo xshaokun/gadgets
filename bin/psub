@@ -157,10 +157,8 @@ fi
 
 # 6. submit job script
 if [ -z $no_submit ]; then
-    cd $(dirname $filepath) &&
-    bsub < $output_dir/$jobscript_name &&
-    printf "$stp Submit job script\n" 6
-    cd - > /dev/null
+    submit=$(bsub < $output_dir/$jobscript_name) &&
+    printf "$stp Submit job script: %s\n" 6 "$submit"
 else
     printf "$log Not submit job script\n"
 fi

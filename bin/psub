@@ -68,6 +68,7 @@ shift "$(($OPTIND - 1))"
 filepath=$(readlink -f $1)
 if [ ! -f $filepath ]; then
     printf "$err $kw does not exist !\n" $filepath
+    exit 1
 fi
 
 # 1. Parsing and create output directory

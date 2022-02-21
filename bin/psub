@@ -2,12 +2,6 @@
 
 # Total steps of workflow
 steps=6
-# define the formats of log message
-log="> Log:       "
-err="\e[31;1mX Error:     \e[0m"
-stp="\e[92;1m> Done (%d/$steps):\e[0m"
-kw="\e[96m%s\e[0m"
-arw="\e[92;1m->\e[0m"
 # generate by $ pyfiglet -j center -f smslant "PLUTO Job Submission" 
 printf "\e[2m"
 printf "%s\n" "           ___  __   __  ____________       __     __   "
@@ -63,6 +57,13 @@ while getopts 'hnxj:s:' OPTNAME; do
     esac
 done
 shift "$(($OPTIND - 1))"
+
+# define the formats of log message
+log="> Log:       "
+err="\e[31;1mX Error:     \e[0m"
+stp="\e[92;1m> Done (%d/$steps):\e[0m"
+kw="\e[96m%s\e[0m"
+arw="\e[92;1m->\e[0m"
 
 # Get Pluto parameter file
 filepath=$(readlink -f $1)

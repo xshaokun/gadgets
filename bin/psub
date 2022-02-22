@@ -107,7 +107,7 @@ if [ -f $inifile ]; then
 else
     # Create
     ln -s $rel_filepath $inifile &&
-    printf "$stpLink pluto.ini: $kw $arw $kw\n" 2 $inifile $rel_filepath
+    printf "$stp Link pluto.ini: $kw $arw $kw\n" 2 $inifile $rel_filepath
 fi
 
 # 3. Copy definitions.h to the output directory

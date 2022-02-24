@@ -107,7 +107,7 @@ if [ -f $inifile ]; then
 else
     # Create
     ln -s $rel_filepath $inifile &&
-    printf "$stp Link pluto.ini: $kw $arw $kw\n" 2 $inifile $rel_filepath
+    printf "$stpLink pluto.ini: $kw $arw $kw\n" 2 $inifile $rel_filepath
 fi
 
 # 3. Copy definitions.h to the output directory
@@ -132,8 +132,8 @@ fi
 jobscript_name=job.s
 if [ -z $jobscript ]; then
     jobscript=$(readlink -f job.s)
-    jobscript_name=$(basename $jobscript)
 fi
+jobscript_name=$(basename $jobscript)
 
 # Task name is the init filename without extension
 taskname=$(basename $filepath .ini);
@@ -148,7 +148,8 @@ if [ -e $jobscript ]; then
     s|(^#BSUB[ ]+-J[ ]+)[^ ]+([ ]*.*)$|\1$taskname\2|;\
     s|(^#BSUB[ ]+-o[ ]+)[^ ]+([ ]*.*)$|\1$output_dir/%J.out\2|;\
     s|(^#BSUB[ ]+-e[ ]+)[^ ]+([ ]*.*)$|\1$output_dir/%J.err\2|;\
-    s|(^.*[ ]+)[^ ]+pluto(.*-i[ ]+)[^ ]+(.*)|\1$output_dir/pluto\2$inifile\3|;\
+    s|(^.*[ ]+)[^ ]+pluto(.*-i[ ]+)[^ ]+(.*)|\1$output_dir/pluto\2$filepath\3|;\
+    s|^./pluto(.*-i[ ]+)[^ ]+(.*)|$output_dir/pluto\1$filepath\2;\
     " $jobscript > $output_dir/$jobscript_name &&
     printf "$stp Create/Override: $kw\n" 5 $output_dir/$jobscript_name
 else
@@ -158,6 +159,7 @@ fi
 
 # 6. submit job script
 if [ -z $no_submit ]; then
+    cd $(dirname $filepath)
     submit=$(bsub < $output_dir/$jobscript_name) &&
     printf "$stp Submit job script: %s\n" 6 "$submit"
 else

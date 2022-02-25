@@ -159,7 +159,10 @@ if [ -z $no_pluto ]; then
     istep=$(($istep + 1)) &&
     printf "$stp Copy pluto: $kw $arw $kw\n" $istep $src/pluto $output_dir/pluto
 else
-    printf "$log Skip updating definitions.h and pluto\n"
+    istep=$(($istep + 1)) &&
+    printf "$stp Skip updating definitions.h\n" $istep
+    istep=$(($istep + 1)) &&
+    printf "$stp Skip updating pluto\n" $istep
 fi
 
 # Set default filename of job script to job.s

@@ -138,7 +138,7 @@ else
     # Create
     ln -s $rel_filepath $inipluto &&
     istep=$(($istep + 1)) &&
-    printf "$stpLink pluto.ini: $kw $arw $kw\n" $istep $inipluto $rel_filepath
+    printf "$stp Link pluto.ini: $kw $arw $kw\n" $istep $inipluto $rel_filepath
 fi
 
 # 3. Copy definitions.h and pluto from source code to the output directory
@@ -179,21 +179,20 @@ printf "$log Parsed taskname: $kw\n" $taskname
 # output filename
 # error filename
 if [ -e $jobscript ]; then
-    if [ $jobscript == $output_dir/$jobscript_name ]; then 
-        cp $jobscript ${jobscript}.bak
-        jobscript=${jobscript}.bak
-        printf "$log Template job script is already in output directory, backup it as: $kw\n" $jobscript
+    if [ $jobscript == $output_dir/$jobscript_name ]; then
+        printf "$log Template job script is already in output directory, so just use it\n"
+    else
+        sed -r -e \
+        "\
+        s|(^#BSUB[ ]+-J[ ]+)[^ ]+([ ]*.*)$|\1$taskname\2|;\
+        s|(^#BSUB[ ]+-o[ ]+)[^ ]+([ ]*.*)$|\1$output_dir/%J.out\2|;\
+        s|(^#BSUB[ ]+-e[ ]+)[^ ]+([ ]*.*)$|\1$output_dir/%J.err\2|;\
+        s|(^.*[ ]+)[^ ]+pluto(.*-i[ ]+)[^ ]+(.*)|\1$output_dir/pluto\2$inifile\3|;\
+        s|^./pluto(.*-i[ ]+)[^ ]+(.*)|$output_dir/pluto\1$inifile\2|;\
+        " $jobscript > $output_dir/$jobscript_name &&
+        istep=$(($istep + 1)) &&
+        printf "$stp Create/Override: $kw\n" $istep $output_dir/$jobscript_name
     fi
-    sed -r -e \
-    "\
-    s|(^#BSUB[ ]+-J[ ]+)[^ ]+([ ]*.*)$|\1$taskname\2|;\
-    s|(^#BSUB[ ]+-o[ ]+)[^ ]+([ ]*.*)$|\1$output_dir/%J.out\2|;\
-    s|(^#BSUB[ ]+-e[ ]+)[^ ]+([ ]*.*)$|\1$output_dir/%J.err\2|;\
-    s|(^.*[ ]+)[^ ]+pluto(.*-i[ ]+)[^ ]+(.*)|\1$output_dir/pluto\2$inifile\3|;\
-    s|^./pluto(.*-i[ ]+)[^ ]+(.*)|$output_dir/pluto\1$inifile\2|;\
-    " $jobscript > $output_dir/$jobscript_name &&
-    istep=$(($istep + 1)) &&
-    printf "$stp Create/Override: $kw\n" $istep $output_dir/$jobscript_name
 else
     printf "$err Tempelate job script $kw does not exist !\n" $jobscript
     exit 1

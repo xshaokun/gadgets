@@ -2,6 +2,7 @@
 
 # Total steps of workflow
 steps=6
+istep=0
 # generate by $ pyfiglet -j center -f smslant "PLUTO Job Submission" 
 printf "\e[2m"
 printf "%s\n" "           ___  __   __  ____________       __     __   "
@@ -14,7 +15,7 @@ printf "%s\n" "          _\ \/ // / _ \/  ' \/ (_-<(_-</ / _ \/ _ \    "
 printf "%s\n" "         /___/\_,_/_.__/_/_/_/_/___/___/_/\___/_//_/    "
 printf "\e[0m\n"
 
-usage="Usage: psub [-h] [-n] [-x] [-j jobscript] [-s src_dir] FILE.in"
+usage="Usage: psub [-h] [-n] [-x] [-j jobscript] [-s src_dir] [FILE.ini]"
 while getopts 'hnxj:s:' OPTNAME; do
     case "$OPTNAME" in
     h)
@@ -29,7 +30,7 @@ while getopts 'hnxj:s:' OPTNAME; do
         printf "%s\n" "$usage"
         printf "%s\n" "-h,    This help text"
         printf "%s\n" "-n,    Not submit job script"
-        printf "%s\n" "-x,    Not change executable file pluto"
+        printf "%s\n" "-x,    Not change definitions.h and the executable pluto"
         printf "%s\n" "-j,    Specify filename of job script. Default: job.s"
         printf "%s\n" "-s,    Specify the directory of source code. Default: \${filepath%/runs*}/code/"
         exit 0
@@ -40,7 +41,7 @@ while getopts 'hnxj:s:' OPTNAME; do
         ;;
     x)
         no_pluto=true
-        steps=$(($steps - 1))
+        steps=$(($steps - 2))
         ;;
     j)
         jobscript=$(readlink -f $OPTARG)
@@ -66,16 +67,25 @@ kw="\e[96m%s\e[0m"
 arw="\e[92;1m->\e[0m"
 
 # Get Pluto parameter file
-filepath=$(readlink -f $1)
-if [ ! -f $filepath ]; then
-    printf "$err $kw does not exist !\n" $filepath
+if [ ! -f $1 ]; then
+    printf "$err $kw does not exist !\n" $1
     exit 1
 fi
+inifile=$1
+if [ -z $1 ]; then
+    inifile=pluto.ini
+else
+    inifile=$1
+fi
+inifile=$(readlink -f $inifile)
+printf "$log Specified parameter file: $kw\n" $inifile
+directory=$(dirname $inifile)
+filename=$(basename $inifile)
 
 # 1. Parsing and create output directory
-output_dir=$(awk '{if ($1 == "output_dir") print $2}' $filepath)
-output_dir=$(readlink -f $(dirname $filepath)/$output_dir)
+output_dir=$(awk '{if ($1 == "output_dir") print $2}' $inifile)
 if [ $output_dir ]; then
+    output_dir=$(readlink -f $directory/$output_dir)
     printf "$log Parsed output directory: $kw\n" $output_dir
     if [ -d $output_dir ]; then
         printf "$log Output directory already exits, so just use it\n"
@@ -85,58 +95,75 @@ if [ $output_dir ]; then
     else
         mkdir $output_dir
     fi
+    istep=$(($istep + 1))
+    printf "$stp Create output directory: $kw\n" $istep $output_dir
+    origin=$(pwd)
+    if [ $directory ]; then
+        cd $directory
+        printf "$log cd to: $kw\n" $(pwd)
+    else
+        printf "$err Cannot parse directory of parameter file!\n"
+        exit 1
 else
+    origin=$(pwd)
+    output_dir=$origin
     printf "$log No specified output directory, outputs will be saved in the current directory\n"
+    istep=$(($istep + 1))
+    printf "$stp Determine output directory: $kw\n" $istep $output_dir
 fi
-    printf "$stp Create output directory: $kw\n" 1 $output_dir
 
 # 2. Create or override the soft link pluto.ini
-inifile=$output_dir/pluto.ini
+inipluto=$output_dir/pluto.ini
 # Use relative path for link
-rel_filepath=$(realpath --relative-to=$output_dir $filepath)
-if [ -f $inifile ]; then
+rel_filepath=$(realpath --relative-to=$output_dir $inifile)
+if [ -f $inipluto ]; then
     # Override
-    if [ -L $inifile ]; then
-        rm $inifile
-        ln -s $rel_filepath $inifile &&
-        printf "$stp Link pluto.ini: $kw $arw $kw\n" 2 $inifile $rel_filepath
+    if [ -L $inipluto ]; then
+        rm $inipluto
+        ln -s $rel_filepath $inipluto &&
+        istep=$(($istep + 1)) &&
+        printf "$stp Link pluto.ini: $kw $arw $kw\n" $istep $inipluto $rel_filepath
     else
-        printf "$log $kw already exits but is not a symbolic link, so just use it\n" $inifile &&
-        printf "$stp Use $kw itself\n" 2 $inifile
+        printf "$log $kw already exits but is not a symbolic link, so just use it\n" $inipluto &&
+        istep=$(($istep + 1)) &&
+        printf "$stp Use $kw itself\n" $istep $inipluto
     fi
 else
     # Create
-    ln -s $rel_filepath $inifile &&
-    printf "$stpLink pluto.ini: $kw $arw $kw\n" 2 $inifile $rel_filepath
+    ln -s $rel_filepath $inipluto &&
+    istep=$(($istep + 1)) &&
+    printf "$stpLink pluto.ini: $kw $arw $kw\n" $istep $inipluto $rel_filepath
 fi
 
-# 3. Copy definitions.h to the output directory
-if [ -z $src ]; then
-    src=${filepath%/runs*}/code
-fi
-if [ ! -d $src ]; then
-    printf "$err Directory of source code does not exist: $kw\n" $src
-    exit 1
-fi
-cp $src/definitions.h $output_dir &&
-printf "$stp Copy definitions.h: $kw $arw $kw\n" 3 $src/definitions.h $output_dir/definitions.h
-# 4. Copy pluto to the output directory
+# 3. Copy definitions.h and pluto from source code to the output directory
 if [ -z $no_pluto ]; then
+    if [ -z $src ]; then
+        src=${directory%/runs*}/code
+    fi
+    printf "$log Determine source code directory: $kw\n" $src
+    if [ ! -d $src ]; then
+        printf "$err Directory of source code does not exist: $kw\n" $src
+        exit 1
+    fi
+    cp $src/definitions.h $output_dir &&
+    istep=$(($istep + 1)) &&
+    printf "$stp Copy definitions.h: $kw $arw $kw\n" $istep $src/definitions.h $output_dir/definitions.h
+
     cp $src/pluto $output_dir &&
-    printf "$stp Copy pluto: $kw $arw $kw\n" 4 $src/pluto $output_dir/pluto
+    istep=$(($istep + 1)) &&
+    printf "$stp Copy pluto: $kw $arw $kw\n" $istep $src/pluto $output_dir/pluto
 else
-    printf "$stp Do not change pluto\n" 4
+    printf "$log Skip updating definitions.h and pluto\n"
 fi
 
 # Set default filename of job script to job.s
-jobscript_name=job.s
 if [ -z $jobscript ]; then
-    jobscript=$(readlink -f job.s)
+    jobscript=$origin/job.s
 fi
 jobscript_name=$(basename $jobscript)
 
 # Task name is the init filename without extension
-taskname=$(basename $filepath .ini);
+taskname=$(basename $inifile .ini);
 printf "$log Parsed taskname: $kw\n" $taskname
 # 5. Replace some fields in job script with task name, the fields include
 # job name
@@ -148,10 +175,11 @@ if [ -e $jobscript ]; then
     s|(^#BSUB[ ]+-J[ ]+)[^ ]+([ ]*.*)$|\1$taskname\2|;\
     s|(^#BSUB[ ]+-o[ ]+)[^ ]+([ ]*.*)$|\1$output_dir/%J.out\2|;\
     s|(^#BSUB[ ]+-e[ ]+)[^ ]+([ ]*.*)$|\1$output_dir/%J.err\2|;\
-    s|(^.*[ ]+)[^ ]+pluto(.*-i[ ]+)[^ ]+(.*)|\1$output_dir/pluto\2$filepath\3|;\
-    s|^./pluto(.*-i[ ]+)[^ ]+(.*)|$output_dir/pluto\1$filepath\2;\
+    s|(^.*[ ]+)[^ ]+pluto(.*-i[ ]+)[^ ]+(.*)|\1$output_dir/pluto\2$inifile\3|;\
+    s|^./pluto(.*-i[ ]+)[^ ]+(.*)|$output_dir/pluto\1$inifile\2|;\
     " $jobscript > $output_dir/$jobscript_name &&
-    printf "$stp Create/Override: $kw\n" 5 $output_dir/$jobscript_name
+    istep=$(($istep + 1)) &&
+    printf "$stp Create/Override: $kw\n" $istep $output_dir/$jobscript_name
 else
     printf "$err Tempelate job script $kw does not exist !\n" $jobscript
     exit 1
@@ -159,9 +187,9 @@ fi
 
 # 6. submit job script
 if [ -z $no_submit ]; then
-    cd $(dirname $filepath)
     submit=$(bsub < $output_dir/$jobscript_name) &&
-    printf "$stp Submit job script: %s\n" 6 "$submit"
+    istep=$(($istep + 1)) &&
+    printf "$stp Submit job script: %s\n" $istep "$submit"
 else
     printf "$log Not submit job script\n"
 fi

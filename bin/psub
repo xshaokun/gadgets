@@ -142,6 +142,7 @@ if [ -z $output_dir ]; then
         # If the filename is not pluto, use it as output_dir
         output_dir=$(readlink -f $directory/$taskname) || exit_psub 1
         print "$log Parsed output directory from filename: $kw\n" $output_dir
+        from_filename=true
     fi
 else
     # output_dir is defined in .ini file
@@ -161,9 +162,15 @@ if [ $output_dir ]; then
     istep=$(($istep + 1))
     print "$stp Create output directory: $kw\n" $istep $output_dir
     if [ $directory ]; then
-        # The following workflow will be done in the directory of parameter file
-        cd $directory
-        print "$log cd to: $kw\n" $(pwd)
+        if [ -z from_filename ]; then
+            # if output_dir is configured in .ini file
+            # the following workflow will be done in the directory of parameter file
+            cd $directory
+            print "$log cd to the directory of parameter file: $kw\n" $directory
+        else
+            cd $output_dir
+            print "$log cd to the output directory: $kw\n" $output_dir
+        fi
     else
         printf "$err Cannot parse directory of parameter file!\n"
         exit_psub 1

@@ -120,8 +120,10 @@ else
 fi
 inifile=$(readlink -f $inifile)
 print "$log Specified parameter file: $kw\n" $inifile
-directory=$(dirname $inifile)
-filename=$(basename $inifile)
+directory=$(dirname $inifile) || exit_psub 1
+# Task name is the init filename without extension
+taskname=$(basename $inifile .ini);
+print "$log Parsed taskname: $kw\n" $taskname
 
 # Compare files
 if [ $orifile ]; then
@@ -134,9 +136,21 @@ fi
 
 # 1. Parsing and create output directory
 output_dir=$(awk '{if ($1 == "output_dir") print $2}' $inifile)
+if [ -z $output_dir ]; then
+    if [ $taskname != pluto ]; then
+        # output_dir is not defined in .ini file
+        # If the filename is not pluto, use it as output_dir
+        output_dir=$(readlink -f $directory/$taskname) || exit_psub 1
+        print "$log Parsed output directory from filename: $kw\n" $output_dir
+        from_filename=true
+    fi
+else
+    # output_dir is defined in .ini file
+    output_dir=$(readlink -f $directory/$output_dir) || exit_psub 1
+    print "$log Parsed output directory from configuration in parameter file: $kw\n" $output_dir
+fi
 if [ $output_dir ]; then
-    output_dir=$(readlink -f $directory/$output_dir)
-    print "$log Parsed output directory: $kw\n" $output_dir
+    # Create the output directory if it can be parsed from above
     if [ -d $output_dir ]; then
         print "$log Output directory already exits, so just use it\n"
     elif [ -f $output_dir ]; then
@@ -148,17 +162,24 @@ if [ $output_dir ]; then
     istep=$(($istep + 1))
     print "$stp Create output directory: $kw\n" $istep $output_dir
     if [ $directory ]; then
-        cd $directory
-        print "$log cd to: $kw\n" $(pwd)
+        if [ -z from_filename ]; then
+            # if output_dir is configured in .ini file
+            # the following workflow will be done in the directory of parameter file
+            cd $directory
+            print "$log cd to the directory of parameter file: $kw\n" $directory
+        else
+            cd $output_dir
+            print "$log cd to the output directory: $kw\n" $output_dir
+        fi
     else
         printf "$err Cannot parse directory of parameter file!\n"
         exit_psub 1
     fi
 else
-    output_dir=$origin
-    print "$log No specified output directory, outputs will be saved in the current directory\n"
-    istep=$(($istep + 1))
-    print "$stp Determine output directory: $kw\n" $istep $output_dir
+        output_dir=$origin || exit_psub 1
+        print "$log No specified output directory, outputs will be saved in the current directory\n"
+        istep=$(($istep + 1))
+        print "$stp Determine output directory: $kw\n" $istep $output_dir
 fi
 
 # If running under output directory and not specified parameter file,
@@ -220,9 +241,6 @@ if [ -z $jobscript ]; then
 fi
 jobscript_name=$(basename $jobscript)
 
-# Task name is the init filename without extension
-taskname=$(basename $inifile .ini);
-print "$log Parsed taskname: $kw\n" $taskname
 # 5. Replace some fields in job script with task name, the fields include
 # job name
 # output filename

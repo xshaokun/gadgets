@@ -234,8 +234,8 @@ if [ -e $jobscript ]; then
         sed -r -e \
         "\
         s|(^#BSUB[ ]+-J[ ]+)[^ ]+([ ]*.*)$|\1$taskname\2|;\
-        s|(^#BSUB[ ]+-o[ ]+)[^ ]+([ ]*.*)$|\1$output_dir/%J.out\2|;\
-        s|(^#BSUB[ ]+-e[ ]+)[^ ]+([ ]*.*)$|\1$output_dir/%J.err\2|;\
+        s|(^#BSUB[ ]+-o[ ]+)[^ ]+([ ]*.*)$|\1$output_dir/_lsf_out.%J\2|;\
+        s|(^#BSUB[ ]+-e[ ]+)[^ ]+([ ]*.*)$|\1$output_dir/_lsf_err.%J\2|;\
         s|(^.*[ ]+)[^ ]+pluto(.*-i[ ]+)[^ ]+(.*)|\1$output_dir/pluto\2$inifile\3|;\
         s|^./pluto(.*-i[ ]+)[^ ]+(.*)|$output_dir/pluto\1$inifile\2|;\
         " $jobscript > $output_dir/$jobscript_name &&

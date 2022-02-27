@@ -1,23 +1,52 @@
 #!/usr/bin/env bash
 
-# Total steps of workflow
-steps=6
-istep=0
-origin=$(pwd)
-# generate by $ pyfiglet -j center -f smslant "PLUTO Job Submission" 
-printf "\e[2m"
-printf "%s\n" "           ___  __   __  ____________       __     __   "
-printf "%s\n" "          / _ \/ /  / / / /_  __/ __ \  __ / /__  / /   "
-printf "%s\n" "         / ___/ /__/ /_/ / / / / /_/ / / // / _ \/ _ \  "
-printf "%s\n" "        /_/  /____/\____/ /_/  \____/  \___/\___/_.__/  "
-printf "%s\n" "            ____     __         _         _             "
-printf "%s\n" "           / __/_ __/ /  __ _  (_)__ ___ (_)__  ___     "
-printf "%s\n" "          _\ \/ // / _ \/  ' \/ (_-<(_-</ / _ \/ _ \    "
-printf "%s\n" "         /___/\_,_/_.__/_/_/_/_/___/___/_/\___/_//_/    "
-printf "\e[0m\n"
+# Define something above all
+steps=6 # total steps of workflow
+istep=0 # count the step of workflow
+origin=$(pwd) # directory where execute the script
+tmplog=$origin/psub.tmp # temperory log file
 
-usage="Usage: psub [-h] [-n] [-x] [-j jobscript] [-s src_dir] [FILE.ini]"
-while getopts 'hnxj:s:' OPTNAME; do
+# define the formats of log message
+log="> Log:       "
+err="\e[31;1mX Error:     \e[0m"
+kw="\e[96m%s\e[0m"
+arw="\e[92;1m->\e[0m"
+
+print(){
+    # save output message
+    printf "$@" | tee -a $tmplog
+}
+
+print_header(){
+# generate by $ pyfiglet -j center -f smslant "PLUTO Job Submission" 
+    print "\e[2m\n\
+           ___  __   __  ____________       __     __   \n\
+          / _ \/ /  / / / /_  __/ __ \  __ / /__  / /   \n\
+         / ___/ /__/ /_/ / / / / /_/ / / // / _ \/ _ \  \n\
+        /_/  /____/\____/ /_/  \____/  \___/\___/_.__/  \n\
+            ____     __         _         _             \n\
+           / __/_ __/ /  __ _  (_)__ ___ (_)__  ___     \n\
+          _\ \/ // / _ \/  ' \/ (_-<(_-</ / _ \/ _ \    \n\
+         /___/\_,_/_.__/_/_/_/_/___/___/_/\___/_//_/    \n\
+    \n
+    Execution Time: $(date)
+    \e[0m\n"
+}
+
+exit_psub(){
+    # remove tmp log before exit
+    rm $tmplog &&
+    exit $1
+}
+
+usage="\
+Usage: psub [-h] [-n] [-x] [-j jobscript] [-s src_dir] [-d file] [-m message] [FILE.ini]\
+"
+
+# The main part of the script
+print_header | tee $tmplog
+print "\e[31;1m> Command:    $0 $*\e[0m\n"
+while getopts 'hnxj:s:d:m:' OPTNAME; do
     case "$OPTNAME" in
     h)
         printf "Workflow:\n"
@@ -34,7 +63,9 @@ while getopts 'hnxj:s:' OPTNAME; do
         printf "%s\n" "-x,    Not change definitions.h and the executable pluto"
         printf "%s\n" "-j,    Specify filename of job script. Default: job.s"
         printf "%s\n" "-s,    Specify the directory of source code. Default: \${filepath%/runs*}/code/"
-        exit 0
+        printf "%s\n" "-d,    Compare parameter file with given file, and print to psub_diff.log"
+        printf "%s\n" "-m,    Print a message to psub.log"
+        exit_psub 0
         ;;
     n)
         no_submit=true
@@ -46,31 +77,40 @@ while getopts 'hnxj:s:' OPTNAME; do
         ;;
     j)
         jobscript=$(readlink -f $OPTARG)
-        printf "$log Specified Job Script: $kw\n" $jobscript
+        print "$log Specified Job Script: $kw\n" $jobscript
         ;;
     s)
         src=$(readlink -f $OPTARG)/
-        printf "$log Specified Directory of Source Code: $kw\n" $src
+        print "$log Specified Directory of Source Code: $kw\n" $src
+        ;;
+    d)
+        orifile=$(readlink -f $OPTARG)
+        print "$log Specified original parameter file to compare: $kw\n" $orifile
+        ;;
+    m)
+        has_msg=true
+        msg=$OPTARG
         ;;
     ?)
         printf "$usage" >&2
-        exit 1
+        exit_psub 1
         ;;
     esac
 done
 shift "$(($OPTIND - 1))"
 
+# Save message
+if [ $has_msg ]; then
+    print "\e[31;1m> Comment:    $msg\e[0m\n"
+fi
+
 # define the formats of log message
-log="> Log:       "
-err="\e[31;1mX Error:     \e[0m"
 stp="\e[92;1m> Done (%d/$steps):\e[0m"
-kw="\e[96m%s\e[0m"
-arw="\e[92;1m->\e[0m"
 
 # Get Pluto parameter file
 if [ ! -f $1 ]; then
     printf "$err $kw does not exist !\n" $1
-    exit 1
+    exit_psub 1
 fi
 inifile=$1
 if [ -z $1 ]; then
@@ -79,37 +119,46 @@ else
     inifile=$1
 fi
 inifile=$(readlink -f $inifile)
-printf "$log Specified parameter file: $kw\n" $inifile
+print "$log Specified parameter file: $kw\n" $inifile
 directory=$(dirname $inifile)
 filename=$(basename $inifile)
+
+# Compare files
+if [ $orifile ]; then
+    print "$log Compare files: $kw $arw $kw check $directory/psub_diff.log for details\n" $orifile $inifile
+    printf "$kw $arw $kw\n" $orifile $inifile >> $directory/psub_diff.log
+    diff_result=$(diff -y --suppress-common-lines $orifile $inifile)
+    printf "$diff_result\n\n" >> $directory/psub_diff.log
+    printf "$diff_result\n\n" >> $tmplog
+fi
 
 # 1. Parsing and create output directory
 output_dir=$(awk '{if ($1 == "output_dir") print $2}' $inifile)
 if [ $output_dir ]; then
     output_dir=$(readlink -f $directory/$output_dir)
-    printf "$log Parsed output directory: $kw\n" $output_dir
+    print "$log Parsed output directory: $kw\n" $output_dir
     if [ -d $output_dir ]; then
-        printf "$log Output directory already exits, so just use it\n"
+        print "$log Output directory already exits, so just use it\n"
     elif [ -f $output_dir ]; then
         printf "$err $kw already exists but is not a directory\n" $output_dir
-        exit 1
+        exit_psub 1
     else
         mkdir $output_dir
     fi
     istep=$(($istep + 1))
-    printf "$stp Create output directory: $kw\n" $istep $output_dir
+    print "$stp Create output directory: $kw\n" $istep $output_dir
     if [ $directory ]; then
         cd $directory
-        printf "$log cd to: $kw\n" $(pwd)
+        print "$log cd to: $kw\n" $(pwd)
     else
         printf "$err Cannot parse directory of parameter file!\n"
-        exit 1
+        exit_psub 1
     fi
 else
     output_dir=$origin
-    printf "$log No specified output directory, outputs will be saved in the current directory\n"
+    print "$log No specified output directory, outputs will be saved in the current directory\n"
     istep=$(($istep + 1))
-    printf "$stp Determine output directory: $kw\n" $istep $output_dir
+    print "$stp Determine output directory: $kw\n" $istep $output_dir
 fi
 
 # If running under output directory and not specified parameter file,
@@ -128,17 +177,17 @@ if [ -f $inipluto ]; then
         rm $inipluto
         ln -s $rel_filepath $inipluto &&
         istep=$(($istep + 1)) &&
-        printf "$stp Link pluto.ini: $kw $arw $kw\n" $istep $inipluto $rel_filepath
+        print "$stp Link pluto.ini: $kw $arw $kw\n" $istep $inipluto $rel_filepath
     else
-        printf "$log $kw already exits but is not a symbolic link, so just use it\n" $inipluto &&
+        print "$log $kw already exits but is not a symbolic link, so just use it\n" $inipluto &&
         istep=$(($istep + 1)) &&
-        printf "$stp Use $kw itself\n" $istep $inipluto
+        print "$stp Use $kw itself\n" $istep $inipluto
     fi
 else
     # Create
     ln -s $rel_filepath $inipluto &&
     istep=$(($istep + 1)) &&
-    printf "$stp Link pluto.ini: $kw $arw $kw\n" $istep $inipluto $rel_filepath
+    print "$stp Link pluto.ini: $kw $arw $kw\n" $istep $inipluto $rel_filepath
 fi
 
 # 3. Copy definitions.h and pluto from source code to the output directory
@@ -146,23 +195,23 @@ if [ -z $no_pluto ]; then
     if [ -z $src ]; then
         src=${directory%/runs*}/code
     fi
-    printf "$log Determine source code directory: $kw\n" $src
+    print "$log Determine source code directory: $kw\n" $src
     if [ ! -d $src ]; then
         printf "$err Directory of source code does not exist: $kw\n" $src
-        exit 1
+        exit_psub 1
     fi
     cp $src/definitions.h $output_dir &&
     istep=$(($istep + 1)) &&
-    printf "$stp Copy definitions.h: $kw $arw $kw\n" $istep $src/definitions.h $output_dir/definitions.h
+    print "$stp Copy definitions.h: $kw $arw $kw\n" $istep $src/definitions.h $output_dir/definitions.h
 
     cp $src/pluto $output_dir &&
     istep=$(($istep + 1)) &&
-    printf "$stp Copy pluto: $kw $arw $kw\n" $istep $src/pluto $output_dir/pluto
+    print "$stp Copy pluto: $kw $arw $kw\n" $istep $src/pluto $output_dir/pluto
 else
     istep=$(($istep + 1)) &&
-    printf "$stp Skip updating definitions.h\n" $istep
+    print "$stp Skip updating definitions.h\n" $istep
     istep=$(($istep + 1)) &&
-    printf "$stp Skip updating pluto\n" $istep
+    print "$stp Skip updating pluto\n" $istep
 fi
 
 # Set default filename of job script to job.s
@@ -173,36 +222,40 @@ jobscript_name=$(basename $jobscript)
 
 # Task name is the init filename without extension
 taskname=$(basename $inifile .ini);
-printf "$log Parsed taskname: $kw\n" $taskname
+print "$log Parsed taskname: $kw\n" $taskname
 # 5. Replace some fields in job script with task name, the fields include
 # job name
 # output filename
 # error filename
 if [ -e $jobscript ]; then
     if [ $jobscript == $output_dir/$jobscript_name ]; then
-        printf "$log Template job script is already in output directory, so just use it\n"
+        print "$log Template job script is already in output directory, so just use it\n"
     else
         sed -r -e \
         "\
         s|(^#BSUB[ ]+-J[ ]+)[^ ]+([ ]*.*)$|\1$taskname\2|;\
-        s|(^#BSUB[ ]+-o[ ]+)[^ ]+([ ]*.*)$|\1$output_dir/%J.out\2|;\
-        s|(^#BSUB[ ]+-e[ ]+)[^ ]+([ ]*.*)$|\1$output_dir/%J.err\2|;\
+        s|(^#BSUB[ ]+-o[ ]+)[^ ]+([ ]*.*)$|\1$output_dir/_lsf_out.%J\2|;\
+        s|(^#BSUB[ ]+-e[ ]+)[^ ]+([ ]*.*)$|\1$output_dir/_lsf_err.%J\2|;\
         s|(^.*[ ]+)[^ ]+pluto(.*-i[ ]+)[^ ]+(.*)|\1$output_dir/pluto\2$inifile\3|;\
         s|^./pluto(.*-i[ ]+)[^ ]+(.*)|$output_dir/pluto\1$inifile\2|;\
         " $jobscript > $output_dir/$jobscript_name &&
         istep=$(($istep + 1)) &&
-        printf "$stp Create/Override: $kw\n" $istep $output_dir/$jobscript_name
+        print "$stp Create/Override: $kw\n" $istep $output_dir/$jobscript_name
     fi
 else
     printf "$err Tempelate job script $kw does not exist !\n" $jobscript
-    exit 1
+    exit_psub 1
 fi
 
 # 6. submit job script
 if [ -z $no_submit ]; then
     submit=$(bsub < $output_dir/$jobscript_name) &&
     istep=$(($istep + 1)) &&
-    printf "$stp Submit job script: %s\n" $istep "$submit"
+    print "$stp Submit job script: %s\n" $istep "$submit"
 else
-    printf "$log Not submit job script\n"
+    print "$log Not submit job script\n"
 fi
+
+# Archive tmp log
+cat $tmplog >> $output_dir/psub.log &&
+rm  $tmplog

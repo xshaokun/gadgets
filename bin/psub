@@ -17,6 +17,9 @@ print(){
     printf "$@" | tee -a $tmplog
 }
 
+# format stderr, make it the only red log
+exec 2> >(while read line; do printf "\e[31;1m! Warning:    $line\e[0m" >&2; done)
+
 print_header(){
 # generate by $ pyfiglet -j center -f smslant "PLUTO Job Submission" 
     print "\e[2m\n\
@@ -45,7 +48,7 @@ Usage: psub [-h] [-n] [-x] [-j jobscript] [-s src_dir] [-d file] [-m message] [F
 
 # The main part of the script
 print_header | tee $tmplog
-print "\e[31;1m> Command:    $0 $*\e[0m\n"
+print "\e[33;1m$ Command:    $0 $*\e[0m\n"
 while getopts 'hnxj:s:d:m:' OPTNAME; do
     case "$OPTNAME" in
     h)
@@ -101,7 +104,7 @@ shift "$(($OPTIND - 1))"
 
 # Save message
 if [ $has_msg ]; then
-    print "\e[31;1m> Comment:    $msg\e[0m\n"
+    print "\e[33;1m$ Comment:    $msg\e[0m\n"
 fi
 
 # define the formats of log message

@@ -21,7 +21,7 @@ print(){
 exec 2> >(while read line; do printf "\e[31;1m! Warning:    $line\e[0m" >&2; done)
 
 print_header(){
-# generate by $ pyfiglet -j center -f smslant "PLUTO Job Submission" 
+# generate by $ pyfiglet -j center -f smslant "PLUTO Job Submission"
     print "\e[2m\n\
            ___  __   __  ____________       __     __   \n\
           / _ \/ /  / / / /_  __/ __ \  __ / /__  / /   \n\

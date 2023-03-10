@@ -1,17 +1,19 @@
 import logging
-import numpy as np
 
 fmLogger = logging.getLogger("Fermi")
 fmLogger.setLevel(logging.INFO)
 if not fmLogger.handlers:
     ch = logging.StreamHandler()
     ch.setLevel(logging.INFO)
-    
-    formatter = logging.Formatter("%(name)-3s: [%(levelname)-9s] %(asctime)s %(message)s")
-    
+
+    formatter = logging.Formatter(
+        "%(name)-3s: [%(levelname)-9s] %(asctime)s %(message)s"
+    )
+
     ch.setFormatter(formatter)
-    
+
     fmLogger.addHandler(ch)
+
 
 def set_log_level(level):
     """

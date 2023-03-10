@@ -1,21 +1,34 @@
 """
 Streamline plotting for 2D vector fields.
 """
-from __future__ import division
-import numpy as np
-import matplotlib
-import matplotlib.cm as cm
-import matplotlib.colors as mcolors
-import matplotlib.collections as mcollections
-import matplotlib.patches as patches
 import bisect
 
-__all__ = ['streamplot']
+import matplotlib
+import matplotlib.cm as cm
+import matplotlib.collections as mcollections
+import matplotlib.colors as mcolors
+import matplotlib.patches as patches
+import numpy as np
+
+__all__ = ["streamplot"]
 
 
-def streamplot(axes, x, y, u, v, density=1, linewidth=None, color=None,
-               cmap=None, norm=None, arrowsize=1, arrowstyle='-|>',
-               minlength=0.1, transform=None):
+def streamplot(
+    axes,
+    x,
+    y,
+    u,
+    v,
+    density=1,
+    linewidth=None,
+    color=None,
+    cmap=None,
+    norm=None,
+    arrowsize=1,
+    arrowstyle="-|>",
+    minlength=0.1,
+    transform=None,
+):
     """Draws streamlines of a vector flow.
     *x*, *y* : 1d arrays
         defines the grid.
@@ -80,7 +93,7 @@ def streamplot(axes, x, y, u, v, density=1, linewidth=None, color=None,
         color = axes._get_lines.color_cycle.next()
 
     if linewidth is None:
-        linewidth = matplotlib.rcParams['lines.linewidth']
+        linewidth = matplotlib.rcParams["lines.linewidth"]
 
     line_kw = {}
     arrow_kw = dict(arrowstyle=arrowstyle, mutation_scale=10 * arrowsize)
@@ -92,15 +105,15 @@ def streamplot(axes, x, y, u, v, density=1, linewidth=None, color=None,
         if np.any(np.isnan(color)):
             color = np.ma.array(color, mask=np.isnan(color))
     else:
-        line_kw['color'] = color
-        arrow_kw['color'] = color
+        line_kw["color"] = color
+        arrow_kw["color"] = color
 
     if isinstance(linewidth, np.ndarray):
         assert linewidth.shape == grid.shape
-        line_kw['linewidth'] = []
+        line_kw["linewidth"] = []
     else:
-        line_kw['linewidth'] = linewidth
-        arrow_kw['linewidth'] = linewidth
+        line_kw["linewidth"] = linewidth
+        arrow_kw["linewidth"] = linewidth
 
     ## Sanity checks.
     assert u.shape == grid.shape
@@ -125,7 +138,7 @@ def streamplot(axes, x, y, u, v, density=1, linewidth=None, color=None,
         if norm is None:
             norm = mcolors.normalize(color.min(), color.max())
         if cmap is None:
-            cmap = cm.get_cmap(matplotlib.rcParams['image.cmap'])
+            cmap = cm.get_cmap(matplotlib.rcParams["image.cmap"])
         else:
             cmap = cm.get_cmap(cmap)
 
@@ -147,30 +160,27 @@ def streamplot(axes, x, y, u, v, density=1, linewidth=None, color=None,
 
         # Add arrows half way along each trajectory.
         s = np.cumsum(np.sqrt(np.diff(tx) ** 2 + np.diff(ty) ** 2))
-        n = np.searchsorted(s, s[-1] / 2.)
+        n = np.searchsorted(s, s[-1] / 2.0)
         arrow_tail = (tx[n], ty[n])
-        arrow_head = (np.mean(tx[n:n + 2]), np.mean(ty[n:n + 2]))
+        arrow_head = (np.mean(tx[n : n + 2]), np.mean(ty[n : n + 2]))
 
         if isinstance(linewidth, np.ndarray):
             line_widths = interparray(grid, linewidth, tx, ty)[:-1]
-            line_kw['linewidth'].extend(line_widths)
-            arrow_kw['linewidth'] = line_widths[n]
+            line_kw["linewidth"].extend(line_widths)
+            arrow_kw["linewidth"] = line_widths[n]
 
         if use_multicolor_lines:
             color_values = interparray(grid, color, tx, ty)[:-1]
             line_colors.extend(color_values)
-            arrow_kw['color'] = cmap(norm(color_values[n]))
+            arrow_kw["color"] = cmap(norm(color_values[n]))
 
-        p = patches.FancyArrowPatch(arrow_tail,
-                                    arrow_head,
-                                    transform=transform,
-                                    **arrow_kw)
+        p = patches.FancyArrowPatch(
+            arrow_tail, arrow_head, transform=transform, **arrow_kw
+        )
         axes.add_patch(p)
         arrows.append(p)
 
-    lc = mcollections.LineCollection(streamlines,
-                                     transform=transform,
-                                     **line_kw)
+    lc = mcollections.LineCollection(streamlines, transform=transform, **line_kw)
     if use_multicolor_lines:
         lc.set_array(np.asarray(line_colors))
         lc.set_cmap(cmap)
@@ -185,17 +195,17 @@ def streamplot(axes, x, y, u, v, density=1, linewidth=None, color=None,
     return stream_container
 
 
-class StreamplotSet(object):
-
+class StreamplotSet:
     def __init__(self, lines, arrows, **kwargs):
         self.lines = lines
         self.arrows = arrows
 
 
 # Coordinate definitions
-#========================
+# ========================
 
-class DomainMap(object):
+
+class DomainMap:
     """Map representing different coordinate systems.
     Coordinate definitions:
     * axes-coordinates goes from 0 to 1 in the domain.
@@ -215,17 +225,20 @@ class DomainMap(object):
         self.x_data2mask = float(mask.nx - 1) / grid.width
         self.y_data2mask = float(mask.ny - 1) / grid.height
 
-        self.x_mask2data = 1. / self.x_data2mask
-        self.y_mask2data = 1. / self.y_data2mask
+        self.x_mask2data = 1.0 / self.x_data2mask
+        self.y_mask2data = 1.0 / self.y_data2mask
 
     def data2mask(self, xi, yi):
         """Return nearest space in mask-coords from given data-coords."""
-        return int((xi - self.grid.x_origin) * self.x_data2mask + 0.5), \
-            int((yi - self.grid.y_origin)  * self.y_data2mask + 0.5)
+        return int((xi - self.grid.x_origin) * self.x_data2mask + 0.5), int(
+            (yi - self.grid.y_origin) * self.y_data2mask + 0.5
+        )
 
     def mask2data(self, xm, ym):
-        return self.grid.x_origin + xm * self.x_mask2data, \
-            self.grid.y_origin + ym * self.y_mask2data
+        return (
+            self.grid.x_origin + xm * self.x_mask2data,
+            self.grid.y_origin + ym * self.y_mask2data,
+        )
 
     def start_trajectory(self, xg, yg):
         xm, ym = self.data2mask(xg, yg)
@@ -245,8 +258,9 @@ class DomainMap(object):
         self.mask._undo_trajectory()
 
 
-class Grid(object):
+class Grid:
     """Grid of data."""
+
     def __init__(self, x, y):
 
         if len(x.shape) == 2:
@@ -280,10 +294,13 @@ class Grid(object):
 
     def within_grid(self, xi, yi):
         """Return True if point is a valid index of grid."""
-        return self.x_origin <= xi < self.x_origin + self.width and \
-            self.y_origin <= yi < self.y_origin + self.height
+        return (
+            self.x_origin <= xi < self.x_origin + self.width
+            and self.y_origin <= yi < self.y_origin + self.height
+        )
 
-class StreamMask(object):
+
+class StreamMask:
     """Mask to keep track of discrete regions crossed by streamlines.
     The resolution of this grid determines the approximate spacing between
     trajectories. Streamlines are only allowed to pass through zeroed cells:
@@ -339,15 +356,18 @@ class TerminateTrajectory(Exception):
 
 
 # Integrator definitions
-#========================
+# ========================
 
 ## This integrator now operates in *real space*.
 
+
 def index_frac(x, x0):
     index = bisect.bisect(x, x0) - 1
-    if index < 0: raise IndexError
-    if index > len(x)-2: raise IndexError
-    frac = (x0 - x[index]) / (x[index+1] - x[index])
+    if index < 0:
+        raise IndexError
+    if index > len(x) - 2:
+        raise IndexError
+    frac = (x0 - x[index]) / (x[index + 1] - x[index])
     return index, frac
 
 
@@ -356,7 +376,7 @@ def get_integrator(x, y, u, v, dmap, minlength):
     # speed (path length) will be in axes-coordinates
     u_ax = u / dmap.grid.width
     v_ax = v / dmap.grid.height
-    speed = np.ma.sqrt(u_ax ** 2 + v_ax ** 2)
+    speed = np.ma.sqrt(u_ax**2 + v_ax**2)
 
     def forward_time(xi, yi):
         i_x, dx = index_frac(x, xi)
@@ -365,7 +385,7 @@ def get_integrator(x, y, u, v, dmap, minlength):
         ds_dt = interpgrid(speed, i_x, dx, i_y, dy)
         if ds_dt == 0:
             raise TerminateTrajectory()
-        dt_ds = 1. / ds_dt
+        dt_ds = 1.0 / ds_dt
         ui = interpgrid(u, i_x, dx, i_y, dy)
         vi = interpgrid(v, i_x, dx, i_y, dy)
         return ui * dt_ds, vi * dt_ds
@@ -431,7 +451,7 @@ def _integrate_rk12(x0, y0, dmap, f):
     ## increment the location gradually. However, due to the efficient
     ## nature of the interpolation, this doesn't boost speed by much
     ## for quite a bit of complexity.
-    maxds = min(1. / dmap.mask.nx, 1. / dmap.mask.ny, 0.1)
+    maxds = min(1.0 / dmap.mask.nx, 1.0 / dmap.mask.ny, 0.1)
 
     ds = maxds
     stotal = 0
@@ -445,8 +465,7 @@ def _integrate_rk12(x0, y0, dmap, f):
         yf_traj.append(yi)
         try:
             k1x, k1y = f(xi, yi)
-            k2x, k2y = f(xi + ds * k1x,
-                         yi + ds * k1y)
+            k2x, k2y = f(xi + ds * k1x, yi + ds * k1y)
         except IndexError:
             # Out of the domain on one of the intermediate integration steps.
             # Take an Euler step to the boundary to improve neatness.
@@ -462,8 +481,9 @@ def _integrate_rk12(x0, y0, dmap, f):
         dy2 = ds * 0.5 * (k1y + k2y)
 
         # Error is normalized to the axes coordinates
-        error = np.sqrt(((dx2 - dx1) / dmap.grid.width) ** 2
-                        + ((dy2 - dy1) / dmap.grid.height) ** 2)
+        error = np.sqrt(
+            ((dx2 - dx1) / dmap.grid.width) ** 2 + ((dy2 - dy1) / dmap.grid.height) ** 2
+        )
 
         # Only save step if within error tolerance
         if error < maxerror:
@@ -511,7 +531,7 @@ def _euler_step(xf_traj, yf_traj, dmap, f):
 
 
 # Utility functions
-#========================
+# ========================
 def interpgrid(a, i_x, dx, i_y, dy):
     """Fast 2D, linear interpolation on an integer grid.
     i_x, i_y are integer indices of array a corresponding to the cell of
@@ -522,9 +542,9 @@ def interpgrid(a, i_x, dx, i_y, dy):
     """
 
     a00 = a[i_y, i_x]
-    a01 = a[i_y, i_x+1]
-    a10 = a[i_y+1, i_x]
-    a11 = a[i_y+1, i_x+1]
+    a01 = a[i_y, i_x + 1]
+    a10 = a[i_y + 1, i_x]
+    a11 = a[i_y + 1, i_x + 1]
     a0 = a00 * (1 - dx) + a01 * dx
     a1 = a10 * (1 - dx) + a11 * dx
     ai = a0 * (1 - dy) + a1 * dy
@@ -535,18 +555,20 @@ def interpgrid(a, i_x, dx, i_y, dy):
 
     return ai
 
+
 def interparray(grid, a, x, y):
     """A simple 2d interpolation routine at points x and y (numpy
     arrays). Returns a numpy array of a at points x[i], y[i]."""
 
-    i_x = np.clip((x[:,None] < grid.x).argmax(-1), 0, len(grid.x)-2)
-    i_y = np.clip((y[:,None] < grid.y).argmax(-1), 0, len(grid.y)-2)
-    i_x[x >= grid.x[-1]] = len(grid.x)-2
-    i_y[y >= grid.y[-1]] = len(grid.y)-2
+    i_x = np.clip((x[:, None] < grid.x).argmax(-1), 0, len(grid.x) - 2)
+    i_y = np.clip((y[:, None] < grid.y).argmax(-1), 0, len(grid.y) - 2)
+    i_x[x >= grid.x[-1]] = len(grid.x) - 2
+    i_y[y >= grid.y[-1]] = len(grid.y) - 2
 
-    dx = (x - grid.x[i_x]) / (grid.x[i_x+1] - grid.x[i_x])
-    dy = (y - grid.y[i_y]) / (grid.y[i_y+1] - grid.y[i_y])
+    dx = (x - grid.x[i_x]) / (grid.x[i_x + 1] - grid.x[i_x])
+    dy = (y - grid.y[i_y]) / (grid.y[i_y + 1] - grid.y[i_y])
     return interpgrid(a, i_x, dx, i_y, dy)
+
 
 def _gen_starting_points(shape):
     """Yield starting points for streamlines.
@@ -560,29 +582,28 @@ def _gen_starting_points(shape):
     xlast = nx - 1
     ylast = ny - 1
     x, y = 0, 0
-    i = 0
-    direction = 'right'
-    for i in range(nx * ny):
+    direction = "right"
+    for _i in range(nx * ny):
 
         yield x, y
 
-        if direction == 'right':
+        if direction == "right":
             x += 1
             if x >= xlast:
                 xlast -= 1
-                direction = 'up'
-        elif direction == 'up':
+                direction = "up"
+        elif direction == "up":
             y += 1
             if y >= ylast:
                 ylast -= 1
-                direction = 'left'
-        elif direction == 'left':
+                direction = "left"
+        elif direction == "left":
             x -= 1
             if x <= xfirst:
                 xfirst += 1
-                direction = 'down'
-        elif direction == 'down':
+                direction = "down"
+        elif direction == "down":
             y -= 1
             if y <= yfirst:
                 yfirst += 1
-                direction = 'right'
+                direction = "right"

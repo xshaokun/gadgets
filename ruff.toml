@@ -1,0 +1,14 @@
+select = [
+    "E",
+    "F",
+    "W",
+    "B",    # flake8-bugbear
+    "G",    # flake8-logging-format
+    "YTT",  # flake8-2020
+    "UP",   # pyupgrade
+    "I",    # isort
+]
+
+ignore = [
+    "E501",  # line too long
+]

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """tools.py - some helpful functions.
 
 Licensed under the MIT License, see LICENSE file for details
@@ -9,7 +8,8 @@ import re
 
 import numpy as np
 
-def nearest(arr,target):
+
+def nearest(arr, target):
     """get the index of nearest value
 
     Given a number, find out the index of the nearest element in an 1D array.
@@ -19,9 +19,10 @@ def nearest(arr,target):
         target: target number
     """
 
-    index = np.abs(arr-target).argmin()
-    
+    index = np.abs(arr - target).argmin()
+
     return index
+
 
 def str_to_number(string):
     """turn a string of number into correct type"""

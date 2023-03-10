@@ -29,6 +29,3 @@ dependencies = [
 [project.urls]
 repository = "https://github.com/xshaokun/gadgets/tree/main/pytools"
 changelog = "https://github.com/xshaokun/gadgets/blob/main/pytools/CHANGELOG.md"
-
-[tool.setuptools.packages.find]
-where = ["pytools"]

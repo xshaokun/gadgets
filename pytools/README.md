@@ -8,10 +8,11 @@ Some python tools useful in other python code.
 * `pluto_tools.py`: some tools  used specificaly for PLUTO simulations
 * `tools.py`: some general used tools
 
-Note that `pytools` can be installed by `pip` under this directory so that it is added to your python's import path:
+Note that the modules here are wrapped as a standard python package `xsk_pytools` (refer to
+`pyproject.toml`), which can be installed by `pip`:
 
     $ python -m pip install --user -e .
 
 Then, it can be imported in your python script:
 
-    import pytools
+    import xsk_pytools

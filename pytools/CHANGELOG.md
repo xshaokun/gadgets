@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/xshaokun/gadgets/compare/v0.1.1...v0.1.2) (2023-03-13)
+
+
+### Miscellaneous Chores
+
+* rename python package as `xsk_pytools` ([#27](https://github.com/xshaokun/gadgets/issues/27)) ([4e7a3d0](https://github.com/xshaokun/gadgets/commit/4e7a3d0ab165746321126fd3caec61793a8809ce))
+
 ## [0.1.1](https://github.com/xshaokun/gadgets/compare/v0.1.0...v0.1.1) (2023-03-10)
 
 

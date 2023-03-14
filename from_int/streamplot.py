@@ -262,7 +262,6 @@ class Grid:
     """Grid of data."""
 
     def __init__(self, x, y):
-
         if len(x.shape) == 2:
             x_row = x[0]
             assert np.allclose(x_row, x)
@@ -372,7 +371,6 @@ def index_frac(x, x0):
 
 
 def get_integrator(x, y, u, v, dmap, minlength):
-
     # speed (path length) will be in axes-coordinates
     u_ax = u / dmap.grid.width
     v_ax = v / dmap.grid.height
@@ -584,7 +582,6 @@ def _gen_starting_points(shape):
     x, y = 0, 0
     direction = "right"
     for _i in range(nx * ny):
-
         yield x, y
 
         if direction == "right":

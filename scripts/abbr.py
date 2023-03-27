@@ -69,7 +69,7 @@ for k, v in others.items():
     abbr[k] = v
 
 
-# Replace the journal iterm with abbreviation according to ADS Journal Abbreviations.
+# Replace the journal item with abbreviation according to ADS Journal Abbreviations.
 # The only  exception is arXiv whose abbreviation in adsbibcode.txt is wrong
 with open(bib) as f1, open("temp.bib", "w") as f2:
     for line in f1.readlines():

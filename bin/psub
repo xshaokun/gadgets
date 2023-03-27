@@ -53,7 +53,7 @@ while getopts 'hnxj:s:d:m:' OPTNAME; do
     case "$OPTNAME" in
     h)
         printf "Workflow:\n"
-        printf "1. parse and create the corresponding output dirctory from given Pluto parameter file\n"
+        printf "1. parse and create the corresponding output directory from given Pluto parameter file\n"
         printf "2. create or override the soft link pluto.ini to the output directory\n"
         printf "3. copy definitions.h to the output directory (easy for yt analysis)\n"
         printf "4. copy executable file pluto to the output directory as backup\n"
@@ -264,7 +264,7 @@ if [ -e $jobscript ]; then
         print "$stp Create/Override: $kw\n" $istep $output_dir/$jobscript_name
     fi
 else
-    printf "$err Tempelate job script $kw does not exist !\n" $jobscript
+    printf "$err Template job script $kw does not exist !\n" $jobscript
     exit_psub 1
 fi
 

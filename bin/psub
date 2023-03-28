@@ -5,6 +5,13 @@ steps=6 # total steps of workflow
 istep=0 # count the step of workflow
 origin=$(pwd) # directory where execute the script
 tmplog=$origin/psub.tmp # temperory log file
+if [ $(uname) = "Darwin" ] && [ -n `which grealpath` ]; then
+    # Due to different behaviors of realpath and realink on Mac,
+    # coreutils is required.
+    shopt -s expand_aliases
+    alias realpath="grealpath"
+    alias readlink="greadlink"
+fi
 
 # define the formats of log message
 log="> Log:       "
@@ -39,6 +46,7 @@ print_header(){
 exit_psub(){
     # remove tmp log before exit
     rm $tmplog &&
+    printf "$err $kw Exit in step $istep !" &&
     exit $1
 }
 

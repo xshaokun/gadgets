@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Define something above all
-steps=6 # total steps of workflow
+steps=8 # total steps of workflow
 istep=0 # count the step of workflow
 origin=$(pwd) # directory where execute the script
 tmplog=$origin/psub.tmp # temperory log file
@@ -65,8 +65,10 @@ while getopts 'hnxj:s:d:m:' OPTNAME; do
         printf "2. create or override the soft link pluto.ini to the output directory\n"
         printf "3. copy definitions.h to the output directory (easy for yt analysis)\n"
         printf "4. copy executable file pluto to the output directory as backup\n"
-        printf "5. create/override job script according to the task name (filename of parameter file)\n"
-        printf "6. submit job script\n"
+        printf "5. copy sysconf.out to the output directory for recording compiler info\n"
+        printf "6. echo model version from model_version.txt (if exists) into sysconf.out\n"
+        printf "7. create/override job script according to the task name (filename of parameter file)\n"
+        printf "8. submit job script\n"
         printf "\n"
         printf "%s\n" "$usage"
         printf "%s\n" "-h,    This help text"
@@ -76,7 +78,7 @@ while getopts 'hnxj:s:d:m:' OPTNAME; do
         printf "%s\n" "-s,    Specify the directory of source code. Default: \${filepath%/runs*}/code/"
         printf "%s\n" "-d,    Compare parameter file with given file, and print to psub_diff.log"
         printf "%s\n" "-m,    Print a message to psub.log"
-        exit_psub 0
+        exit 0
         ;;
     n)
         no_submit=true
@@ -222,7 +224,7 @@ else
     print "$stp Link pluto.ini: $kw $arw $kw\n" $istep $inipluto $rel_filepath
 fi
 
-# 3. Copy definitions.h and pluto from source code to the output directory
+# 3+4. Copy definitions.h and pluto from source code to the output directory
 if [ -z $no_pluto ]; then
     if [ -z $src ]; then
         src=${directory%/runs*}/code
@@ -246,13 +248,25 @@ else
     print "$stp Skip updating pluto\n" $istep
 fi
 
+# 5+6. Copy sysconf.out and echo model version into it
+cp $src/sysconf.out $output_dir &&
+istep=$(($istep + 1)) &&
+print "$stp Copy sysconf.out: $kw $arw $kw\n" $istep $src/sysconf.out $output_dir/sysconf.out
+
+if [ -e $src/model_version.txt ]; then
+    version=`cat $src/model_version.txt` &&
+    echo "MODEL_VERSION  = \"$version\"" >> $output_dir/sysconf.out &&
+    istep=$(($istep + 1)) &&
+    print "$stp Echo model version: $kw $arw $kw\n" $istep $version $output_dir/sysconf.out
+fi
+
 # Set default filename of job script to job.s
 if [ -z $jobscript ]; then
     jobscript=$origin/job.s
 fi
 jobscript_name=$(basename $jobscript)
 
-# 5. Replace some fields in job script with task name, the fields include
+# 7. Replace some fields in job script with task name, the fields include
 # job name
 # output filename
 # error filename
@@ -276,7 +290,7 @@ else
     exit_psub 1
 fi
 
-# 6. submit job script
+# 8. submit job script
 if [ -z $no_submit ]; then
     submit=$(bsub < $output_dir/$jobscript_name) &&
     istep=$(($istep + 1)) &&

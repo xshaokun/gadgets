@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/xshaokun/gadgets/compare/v0.1.2...v0.1.3) (2023-05-23)
+
+
+### Continuous Integration
+
+* add codespell hook into pre-commit ([#31](https://github.com/xshaokun/gadgets/issues/31)) ([c9cb176](https://github.com/xshaokun/gadgets/commit/c9cb17643efb11eb098366a007079c93fab73290))
+
 ## [0.1.2](https://github.com/xshaokun/gadgets/compare/v0.1.1...v0.1.2) (2023-03-13)
 
 

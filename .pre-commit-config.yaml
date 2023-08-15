@@ -1,5 +1,8 @@
 exclude: (astroeqs|fermi)\.py$
 
+ci:
+  autoupdate_schedule: quarterly
+
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.4.0
@@ -13,23 +16,18 @@ repos:
   - id: check-toml
 
 - repo: https://github.com/psf/black
-  rev: 23.3.0
+  rev: 23.7.0
   hooks:
   - id: black
 
-- repo: https://github.com/charliermarsh/ruff-pre-commit
-  rev: v0.0.272
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.0.284
   hooks:
   - id: ruff
     args: [--fix]
 
 - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
-  rev: v2.9.0
+  rev: v2.10.0
   hooks:
   - id: pretty-format-yaml
     args: [--autofix, --indent, '2']
-
-- repo: https://github.com/codespell-project/codespell
-  rev: v2.2.4
-  hooks:
-  - id: codespell

@@ -1,5 +1,8 @@
 exclude: (astroeqs|fermi)\.py$
 
+ci:
+  autoupdate_schedule: quarterly
+
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.4.0

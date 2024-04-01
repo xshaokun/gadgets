@@ -1,6 +1,7 @@
 """
 Streamline plotting for 2D vector fields.
 """
+
 import bisect
 
 import matplotlib

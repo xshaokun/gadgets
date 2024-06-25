@@ -78,5 +78,9 @@ class PlutoArgumentParser(argparse.ArgumentParser):
             nargs="*",
             type=str,
             dest="fields",
-            help="choose certain fields to plot"
+            help="choose certain fields to plot",
+        )
+
+        self.add_argument(
+            "--tag", default=None, type=str, help="specify a tag to the filename"
         )

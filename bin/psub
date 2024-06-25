@@ -51,13 +51,13 @@ exit_psub(){
 }
 
 usage="\
-Usage: psub [-h] [-n] [-x] [-j jobscript] [-s src_dir] [-d file] [-m message] [FILE.ini]\
+Usage: psub [-h] [-n] [-x] [-j jobscript] [-s src_dir] [-d file] [-m message] [-t tag] [FILE.ini]\
 "
 
 # The main part of the script
 print_header | tee $tmplog
 print "\e[33;1m$ Command:    $0 $*\e[0m\n"
-while getopts 'hnxj:s:d:m:' OPTNAME; do
+while getopts 'hnxj:s:d:m:t:' OPTNAME; do
     case "$OPTNAME" in
     h)
         printf "Workflow:\n"
@@ -78,6 +78,8 @@ while getopts 'hnxj:s:d:m:' OPTNAME; do
         printf "%s\n" "-s,    Specify the directory of source code. Default: \${filepath%/runs*}/code/"
         printf "%s\n" "-d,    Compare parameter file with given file, and print to psub_diff.log"
         printf "%s\n" "-m,    Print a message to psub.log"
+        printf "%s\n" "-t,    Specify a tag to the output directory"
+        rm $tmplog &&
         exit 0
         ;;
     n)
@@ -103,6 +105,11 @@ while getopts 'hnxj:s:d:m:' OPTNAME; do
     m)
         has_msg=true
         msg=$OPTARG
+        ;;
+    t)
+        has_tag=true
+        tag=$OPTARG
+        print "$log Specified Tag for the Output Directory: $kw\n" $tag
         ;;
     ?)
         printf "$usage" >&2
@@ -156,6 +163,11 @@ if [ -z $output_dir ]; then
         output_dir=$(readlink -f $directory/$taskname) || exit_psub 1
         print "$log Parsed output directory from filename: $kw\n" $output_dir
         from_filename=true
+        if [ $has_tag ]; then
+            # add tag to the output directory
+            output_dir="${output_dir}_${tag}"
+            print "$log Updated output directory with given tag: $kw\n" $tag
+        fi
     fi
 else
     # output_dir is defined in .ini file

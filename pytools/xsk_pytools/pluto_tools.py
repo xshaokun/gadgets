@@ -84,3 +84,11 @@ class PlutoArgumentParser(argparse.ArgumentParser):
         self.add_argument(
             "--tag", default=None, type=str, help="specify a tag to the filename"
         )
+
+        self.add_argument(
+            "--reg",
+            default=None,
+            type=str,
+            action="append",
+            help="yt-style condition for filter data",
+        )

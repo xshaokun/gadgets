@@ -1,4 +1,4 @@
-select = [
+lint.select = [
     "E",
     "F",
     "W",
@@ -9,6 +9,6 @@ select = [
     "I",    # isort
 ]
 
-ignore = [
+lint.ignore = [
     "E501",  # line too long
 ]

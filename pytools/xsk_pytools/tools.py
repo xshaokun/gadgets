@@ -7,6 +7,7 @@ Licensed under the MIT License, see LICENSE file for details
 import re
 
 import numpy as np
+from scipy.integrate import quad_vec
 
 
 def nearest(arr, target):
@@ -40,3 +41,15 @@ def str_to_number(string):
         return int(string)
     else:
         raise ValueError(f"Cannot identify the string as a number: {string}")
+
+
+def quad_with_units(func, a, b):
+    # do not support mutiple integrations yet
+    uint = (func(a)).units
+    ux = getattr(a, "units", 1)
+    units = uint * ux
+
+    def func_new(x):
+        return func(x).v
+
+    return quad_vec(func_new, a, b)[0] * units

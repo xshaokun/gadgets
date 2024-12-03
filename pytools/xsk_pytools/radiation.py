@@ -6,11 +6,13 @@ from typing import Union
 
 import numpy as np
 import unyt as u
+from scipy.integrate import quad_vec
+from scipy.interpolate import interp1d
 from scipy.special import kv
 from unyt import unyt_array, unyt_quantity
 from unyt.physical_constants import c_cgs, me_cgs, qe_cgs
 
-from .tools import quad_with_units
+from xsk_pytools.tools import sanitize_quantity
 
 k43 = functools.partial(kv, 4 / 3)
 k13 = functools.partial(kv, 1 / 3)
@@ -95,12 +97,12 @@ class GeneralCRDist(abc.ABC):
 
     def number_density(self, gamma):
         # return the number density according to the given energy
-        n = self.norm[:, None] * self._distribution(gamma)
+        n = self.norm * self._distribution(gamma)
         return n.to("cm**-3")
 
     def _int_number(self):
         # integrate the distribution without the normalization
-        v = quad_with_units(self._distribution, self.g_min, self.g_max)
+        v, err = quad_vec(self._distribution, self.g_min, self.g_max)
         return v
 
     @property
@@ -114,10 +116,10 @@ class GeneralCRDist(abc.ABC):
     def _int_energy(self):
         # integrate the distribution of energy without the normalization
         def integrand(gamma):
-            return self._distribution(gamma) * gamma * me0
+            return self._distribution(gamma) * gamma
 
-        v = quad_with_units(integrand, self.g_min, self.g_max)
-        return v
+        v, err = quad_vec(integrand, self.g_min, self.g_max)
+        return v * me0
 
     @property
     def total_energy(self):
@@ -130,10 +132,10 @@ class GeneralCRDist(abc.ABC):
     def _normalize_dist(self, total_number=None, total_energy=None):
         if total_number is not None and total_energy is None:
             self._total_number = total_number
-            self.norm = total_number / self._int_number() / self._norm * self._norm
+            self.norm = total_number / self._int_number() * self._norm
         elif total_energy is not None and total_number is None:
             self._total_energy = total_energy
-            self.norm = total_energy / self._int_energy() / self._norm * self._norm
+            self.norm = total_energy / self._int_energy() * self._norm
         elif total_energy is None and total_number is None:
             raise ValueError(
                 "Must specify one of the keyword arguments total_number or total_energy to normalize the distribution"
@@ -145,14 +147,24 @@ class GeneralCRDist(abc.ABC):
 
 
 class PowerLawCR(GeneralCRDist):
-    def __init__(self, index, e_min, e_max, total_number=None, total_energy=None):
+    def __init__(
+        self, index, e_min, e_max, total_number=None, total_energy=None, norm=1
+    ):
         self.index = index
         super().__init__(
-            e_min, e_max, total_energy=total_energy, total_number=total_number
+            e_min,
+            e_max,
+            total_energy=total_energy,
+            total_number=total_number,
+            norm=norm,
         )
 
     def _distribution(self, gamma):
-        return (gamma / self.g_min) ** (-self.index)
+        return gamma ** (-self.index)
+
+    def _int_energy(self):
+        p = self.index
+        return me0 * (self.g_max ** (-p + 2) - self.g_min ** (-p + 2)) / (-p + 2)
 
 
 class Synchrotron:
@@ -182,7 +194,7 @@ class Synchrotron:
 
     re = qe_cgs**2 / me0  # classical electron radius
 
-    def __init__(self, b_field: tuple[float, str], cr_dist: GeneralCRDist):
+    def __init__(self, b_field, cr_dist: GeneralCRDist):
         self.b_field = unyt_array(b_field)  # magnetic field strength
         if isinstance(cr_dist, GeneralCRDist):
             self.cr_dist = cr_dist  # distribution of cosmic ray
@@ -202,34 +214,56 @@ class Synchrotron:
 
     def freq_c(self, gamma):
         # return a critical frequency for a given energy
-        return (3 / 2 * self.freq_B * gamma**2).to("Hz")
+        return (1.5 * self.freq_B * gamma**2).to("Hz")
 
     def _f_func(self, freq, gamma):
-        xc = (freq / self.freq_c(gamma) / 2).v
-        return k43(xc) * k13(xc) - 3 / 5 * xc * (k43(xc) ** 2 - k13(xc) ** 2)
+        xc = freq.to_value("Hz") / self.freq_c(gamma).v / 2
+        k43x = k43(xc)
+        k13x = k13(xc)
+        return k43x * k13x - 0.6 * xc * (k43x * k43x - k13x * k13x)
 
-    def emissivity(self, freq: Union[tuple[float, str], unyt_quantity]):
+    def integrator(self, freq: Union[tuple[float, str], unyt_quantity]):
         # return emissivity for a given frequency
         # integrate by CR energy
-        # in units of erg/s/Hz/cm**3
-        if isinstance(freq, tuple):
-            freq = unyt_quantity(*freq).to("Hz")
+        # without normalization
+        freq = sanitize_quantity(freq, "Hz")
 
         def integrand(gamma):
             return (
-                freq**2
-                * self.cr_dist._distribution(10)
-                * self._f_func(freq, gamma)
-                / gamma**4
+                self.cr_dist._distribution(gamma) * self._f_func(freq, gamma) / gamma**4
             )
 
-        emiss = quad_with_units(integrand, self.g_min, self.g_max)
-        return (self._norm * emiss * self.cr_dist.norm).to("erg/s/Hz/cm**3")
+        emiss, err = quad_vec(integrand, self.g_min, self.g_max)
+        return emiss
+
+    def norm(self, freq: Union[tuple[float, str], unyt_quantity]):
+        # normalization of emissivity
+        # in units of erg/s/Hz/cm**3
+        return (freq**2 * self._norm * self.cr_dist.norm).to("erg/s/Hz/cm**3")
+
+    def emissivity(self, freq: Union[tuple[float, str], unyt_quantity]):
+        return self.norm(freq) * self.integrator(freq)
 
     def spectrum(self, freq_list: Iterable):
         # return spectrum within given band, i.e. a list of emissivity
         # in units of erg/s/Hz/cm**3
         spec = u.unyt_array(np.zeros(freq_list.shape), "erg/s/Hz/cm**3")
-        for i, f in enumerate(freq_list.to("Hz")):
+        for i, f in enumerate(freq_list):
             spec[i] = self.emissivity(f)
         return spec.to("erg/cm**3")
+
+
+class SynchrotronTable(Synchrotron):
+    def __init__(self, b_field: tuple[float, str], cr_dist: GeneralCRDist, frequency):
+        self.freq = sanitize_quantity(frequency, "Hz")
+        self.b_min = b_field.min()
+        self.b_max = b_field.max()
+        b_field = u.unyt_array(np.linspace(self.b_min, self.b_max, 1000), b_field.units)
+        super().__init__(b_field, cr_dist)
+        self.int_table = self.integrator(self.freq)
+
+    def interpolate(self, b_field):
+        int_func = interp1d(
+            self.b_field, self.int_table, kind="linear", fill_value="extrapolate"
+        )
+        return int_func(b_field)

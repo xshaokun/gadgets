@@ -5,6 +5,7 @@ Licensed under the MIT License, see LICENSE file for details
 """
 
 import re
+from functools import wraps
 
 import numpy as np
 import unyt as u
@@ -61,11 +62,10 @@ def quad_with_units(func, a, b, epsabs=1e-30, epsrel=1e-05):
     # return trapz(y.v, x) * units
 
 
-def sanitize_quantity(quantity, units):
+def sanitize_quantity(quantity, units, equivalence=None):
     """make sure that the quantity is an unyt_quantity and in specific units"""
     if isinstance(quantity, str):
         quan = u.unyt_quantity.from_string(quantity)
-        return quan.to(units)
     try:
         # for a unyt_quantity
         quan = u.unyt_quantity(quantity.value, quantity.units)
@@ -77,4 +77,37 @@ def sanitize_quantity(quantity, units):
             raise TypeError(
                 "dist should be a YTQuantity or a (value, unit) tuple!"
             ) from e
-    return quan.to(units)
+    return quan.to(units, equivalence)
+
+
+def check_output_unit(expected_unit, equivalence=None):
+    """
+    A decorator to check if the output of a function has the expected unit or equivalent units.
+    The physical dimensions must match, and the units can be converted to the expected unit.
+
+    :param expected_unit: The expected unit (as a str object).
+    """
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            result = func(*args, **kwargs)
+
+            # Check if the result is a unyt array
+            if not isinstance(result, u.unyt_array):
+                raise ValueError(f"The output of {func.__name__} is not a unyt array.")
+
+            # Convert the result to the expected unit (if possible)
+            try:
+                result.to(expected_unit, equivalence=equivalence)
+            except (u.UnitConversionError, u.InvalidUnitEquivalence) as e:
+                raise u.UnitConversionError(
+                    f"The output of {func.__name__} cannot be converted to the expected unit {expected_unit}. "
+                    f"Error: {e}"
+                ) from e
+
+            return result
+
+        return wrapper
+
+    return decorator

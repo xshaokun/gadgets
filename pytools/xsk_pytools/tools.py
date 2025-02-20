@@ -9,7 +9,8 @@ from functools import wraps
 
 import numpy as np
 import unyt as u
-from scipy.integrate import quad_vec
+from unyt.exceptions import UnitConversionError, InvalidUnitEquivalence
+from scipy.integrate import quad_vec, quad
 
 
 def nearest(arr, target):
@@ -45,27 +46,36 @@ def str_to_number(string):
         raise ValueError(f"Cannot identify the string as a number: {string}")
 
 
-def quad_with_units(func, a, b, epsabs=1e-30, epsrel=1e-05):
+def quad_with_units(func, a, b, units_str=None, epsabs=1e-30, epsrel=1e-03):
     # do not support mutiple integrations yet
-    uint = getattr(func(a), "units", 1)
+    uint = getattr(arr:=func(a), "units", 1)
+    if arr.size > 1:
+        int_func = quad_vec
+    else:
+        int_func = quad
     ux = getattr(a, "units", 1)
-    units = uint * ux
+    if units_str is not None:
+        units = (1* uint * ux).to(units_str)
+    else:
+        units = uint * ux
     # x = np.logspace(np.log10(a), np.log10(b), 10000)
     if uint != 1:
 
         def func_new(x):
             return func(x).v
 
-        return quad_vec(func_new, a, b, epsabs=epsabs, epsrel=epsrel)[0] * units
+        return int_func(func_new, a, b, epsabs=epsabs, epsrel=epsrel)[0] * units
     else:
-        return quad_vec(func, a, b, epsabs=epsabs, epsrel=epsrel)[0] * units
-    # return trapz(y.v, x) * units
+        return int_func(func, a, b, epsabs=epsabs, epsrel=epsrel)[0] * units
 
 
 def sanitize_quantity(quantity, units, equivalence=None):
     """make sure that the quantity is an unyt_quantity and in specific units"""
     if isinstance(quantity, str):
         quan = u.unyt_quantity.from_string(quantity)
+    if isinstance(quantity, float):
+       # quad_vec would remove units from quantity
+       return u.unyt_quantity(quantity, units)
     try:
         # for a unyt_quantity
         quan = u.unyt_quantity(quantity.value, quantity.units)
@@ -75,9 +85,20 @@ def sanitize_quantity(quantity, units, equivalence=None):
             quan = u.unyt_quantity(*quantity)
         except (RuntimeError, TypeError):
             raise TypeError(
-                "dist should be a YTQuantity or a (value, unit) tuple!"
+                f"Santinize only apply to a YTQuantity or a (value, unit) tuple, not a {type(quantity)}!"
             ) from e
     return quan.to(units, equivalence)
+
+"""
+def santinize_input_quantity(units, equivalence=None):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(quantity):
+            quantity = sanitize_quantity(quantity, units, equivalence)
+            return func(quantity)
+"""
+
+
 
 
 def check_output_unit(expected_unit, equivalence=None):
@@ -100,14 +121,28 @@ def check_output_unit(expected_unit, equivalence=None):
             # Convert the result to the expected unit (if possible)
             try:
                 result.to(expected_unit, equivalence=equivalence)
-            except (u.UnitConversionError, u.InvalidUnitEquivalence) as e:
-                raise u.UnitConversionError(
+            except (UnitConversionError, InvalidUnitEquivalence) as e:
+                raise RuntimeError(
                     f"The output of {func.__name__} cannot be converted to the expected unit {expected_unit}. "
                     f"Error: {e}"
                 ) from e
 
             return result
-
         return wrapper
-
     return decorator
+
+
+def integrate_with_log_segments(func, integrand, lower, upper):
+    start = np.ceil(np.log10(lower))
+    stop = np.floor(np.log10(upper))
+    segments = np.logspace(start, stop, int(stop - start +1))
+    segments = np.array([lower, *segments, upper])
+    if getattr(lower, "units"):
+        segments *= lower.units
+
+    integral = 0
+    for i in range(len(segments) - 1):
+        # integrate within each segment
+        result = func(integrand, segments[i], segments[i + 1])
+        integral += result
+    return integral

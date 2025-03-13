@@ -9,8 +9,8 @@ from functools import wraps
 
 import numpy as np
 import unyt as u
-from unyt.exceptions import UnitConversionError, InvalidUnitEquivalence
-from scipy.integrate import quad_vec, quad
+from scipy.integrate import dblquad, quad, quad_vec
+from unyt.exceptions import InvalidUnitEquivalence, UnitConversionError
 
 
 def nearest(arr, target):
@@ -46,48 +46,66 @@ def str_to_number(string):
         raise ValueError(f"Cannot identify the string as a number: {string}")
 
 
-def quad_with_units(func, a, b, units_str=None, epsabs=1e-30, epsrel=1e-03):
-    # do not support mutiple integrations yet
-    uint = getattr(arr:=func(a), "units", 1)
+def quad_with_units(func, a, b, units_str=None, epsabs=1e-30, epsrel=1e-03, **kwargs):
+    args = kwargs.get("args", ())
+    uint = getattr(arr := func(a, *args), "units", 1)
     if arr.size > 1:
         int_func = quad_vec
     else:
         int_func = quad
     ux = getattr(a, "units", 1)
     if units_str is not None:
-        units = (1* uint * ux).to(units_str)
+        units = (1 * uint * ux).to(units_str)
     else:
         units = uint * ux
-    # x = np.logspace(np.log10(a), np.log10(b), 10000)
     if uint != 1:
 
         def func_new(x):
             return func(x).v
 
-        return int_func(func_new, a, b, epsabs=epsabs, epsrel=epsrel)[0] * units
+        return (
+            int_func(func_new, a, b, epsabs=epsabs, epsrel=epsrel, **kwargs)[0] * units
+        )
     else:
-        return int_func(func, a, b, epsabs=epsabs, epsrel=epsrel)[0] * units
+        return int_func(func, a, b, epsabs=epsabs, epsrel=epsrel, **kwargs)[0] * units
+
+
+def dblquad_with_units(func, a, b, cfunc, dfunc, units_str=None, **kwargs):
+    args = kwargs.get("args", ())
+    yint = getattr(y := cfunc(a), "units", 1)
+    xint = getattr(a, "units", 1)
+    uint = getattr(func(y, a, *args), "units", 1)
+    units = 1 * uint * yint * xint
+    if units_str is not None:
+        units = units.to(units_str)
+    if uint != 1:
+
+        def func_new(x, y):
+            return func(x, y).v
+
+        return dblquad(func, a, b, cfunc, dfunc, **kwargs)[0] * units
 
 
 def sanitize_quantity(quantity, units, equivalence=None):
     """make sure that the quantity is an unyt_quantity and in specific units"""
     if isinstance(quantity, str):
-        quan = u.unyt_quantity.from_string(quantity)
+        quan = u.unyt_array.from_string(quantity)
     if isinstance(quantity, float):
-       # quad_vec would remove units from quantity
-       return u.unyt_quantity(quantity, units)
+        # quad_vec would remove units from quantity
+        return u.unyt_array(quantity, units)
     try:
         # for a unyt_quantity
-        quan = u.unyt_quantity(quantity.value, quantity.units)
+        quan = u.unyt_array(quantity.value, quantity.units)
     except AttributeError as e:
         try:
             # for a tuple of (value, units)
-            quan = u.unyt_quantity(*quantity)
+            quan = u.unyt_array(*quantity)
         except (RuntimeError, TypeError):
             raise TypeError(
-                f"Santinize only apply to a YTQuantity or a (value, unit) tuple, not a {type(quantity)}!"
+                f"Santinize only apply to a YTArray, YTQuantity or a (value, unit) tuple, not a {type(quantity)}!"
             ) from e
     return quan.to(units, equivalence)
+
 
 """
 def santinize_input_quantity(units, equivalence=None):
@@ -97,8 +115,6 @@ def santinize_input_quantity(units, equivalence=None):
             quantity = sanitize_quantity(quantity, units, equivalence)
             return func(quantity)
 """
-
-
 
 
 def check_output_unit(expected_unit, equivalence=None):
@@ -115,8 +131,10 @@ def check_output_unit(expected_unit, equivalence=None):
             result = func(*args, **kwargs)
 
             # Check if the result is a unyt array
-            if not isinstance(result, u.unyt_array):
-                raise ValueError(f"The output of {func.__name__} is not a unyt array.")
+            if getattr(result, "units", None) is None:
+                raise ValueError(
+                    f"The output of {func.__name__} is not a unyt array or quantity."
+                )
 
             # Convert the result to the expected unit (if possible)
             try:
@@ -128,16 +146,18 @@ def check_output_unit(expected_unit, equivalence=None):
                 ) from e
 
             return result
+
         return wrapper
+
     return decorator
 
 
 def integrate_with_log_segments(func, integrand, lower, upper):
     start = np.ceil(np.log10(lower))
     stop = np.floor(np.log10(upper))
-    segments = np.logspace(start, stop, int(stop - start +1))
+    segments = np.logspace(start, stop, int(stop - start + 1))
     segments = np.array([lower, *segments, upper])
-    if getattr(lower, "units"):
+    if lower.units:
         segments *= lower.units
 
     integral = 0

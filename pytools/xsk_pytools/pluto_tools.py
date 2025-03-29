@@ -34,7 +34,6 @@ class ParseIndex(argparse.Action):
     """return correct index of datasets according to given command line arguments"""
 
     def __call__(self, parser, namespace, values, option_string=None):
-        print(f"value is {values}")
         index = []
         logfile = namespace.dtype + ".out"
         if isinstance(values, list):
@@ -72,4 +71,24 @@ class PlutoArgumentParser(argparse.ArgumentParser):
             type=str_to_number,
             action=ParseIndex,
             help="[int/float] index or time of a dataset",
+        )
+
+        self.add_argument(
+            "-f",
+            nargs="*",
+            type=str,
+            dest="fields",
+            help="choose certain fields to plot",
+        )
+
+        self.add_argument(
+            "--tag", default=None, type=str, help="specify a tag to the filename"
+        )
+
+        self.add_argument(
+            "--reg",
+            default=None,
+            type=str,
+            action="append",
+            help="yt-style condition for filter data",
         )

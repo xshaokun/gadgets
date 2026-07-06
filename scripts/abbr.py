@@ -9,6 +9,7 @@ Licensed under the MIT License, see LICENSE file for details
 Usage:
 Modify the value of 'bib' to the absolute path of your .bib file, then execute this script.
 """
+
 import os
 import re
 

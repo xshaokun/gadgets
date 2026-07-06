@@ -5,7 +5,7 @@ ci:
 
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v5.0.0
+  rev: v6.0.0
   hooks:
   - id: end-of-file-fixer
   - id: trailing-whitespace
@@ -15,19 +15,19 @@ repos:
   - id: check-symlinks
   - id: check-toml
 
-- repo: https://github.com/psf/black
-  rev: 24.10.0
+- repo: https://github.com/psf/black-pre-commit-mirror
+  rev: 26.5.1
   hooks:
   - id: black
 
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.8.6
+  rev: v0.15.20
   hooks:
   - id: ruff
     args: [--fix]
 
 - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
-  rev: v2.14.0
+  rev: v2.16.0
   hooks:
   - id: pretty-format-yaml
     args: [--autofix, --indent, '2']

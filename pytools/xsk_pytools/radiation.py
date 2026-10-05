@@ -2,7 +2,6 @@ import abc
 import functools
 import numbers
 import warnings
-from typing import Union
 
 import numpy as np
 import unyt as u
@@ -306,7 +305,7 @@ class Synchrotron(Radiation):
         k13x = k13(xc)
         return k43x * k13x - 0.6 * xc * (k43x * k43x - k13x * k13x)
 
-    def integrator(self, freq: Union[tuple[float, str], unyt_quantity]):
+    def integrator(self, freq: tuple[float, str] | unyt_quantity):
         # return emissivity for a given frequency
         # integrate by CR energy
         # without normalization
@@ -321,13 +320,13 @@ class Synchrotron(Radiation):
         emiss, err = quad_vec(integrand, self.g_min, self.g_max)
         return emiss
 
-    def norm(self, freq: Union[tuple[float, str], unyt_quantity]):
+    def norm(self, freq: tuple[float, str] | unyt_quantity):
         # normalization of emissivity
         # in units of erg/s/Hz/cm**3
         return freq**2 * self._norm * self.cr_dist.norm
 
     @check_output_unit("erg/s/Hz/cm**3")
-    def emissivity(self, freq: Union[tuple[float, str], unyt_quantity]):
+    def emissivity(self, freq: tuple[float, str] | unyt_quantity):
         freq = sanitize_quantity(freq, "Hz", "spectral")
         return self.norm(freq) * self.integrator(freq)
 
